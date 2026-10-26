@@ -92,3 +92,61 @@ create policy "editors delete deal files" on storage.objects for delete to authe
 -- insert into public.members (user_id, email, role)
 --   select id, email, 'viewer' from auth.users where email = 'ahmad@example.com'
 --   on conflict (user_id) do update set role = excluded.role;
+
+-- 5. Push notifications --------------------------------------------------------------------
+-- Each phone that switches alerts on is saved here. Every change to a deal, and a daily check at 08:00 Beirut,
+-- calls the Edge Function `notify`, which sends the notification to everyone except the person who made the change.
+create extension if not exists pg_net;
+create extension if not exists pg_cron;
+
+create table if not exists public.push_subs (
+  endpoint   text primary key,
+  user_id    uuid not null references auth.users(id) on delete cascade default auth.uid(),
+  sub        jsonb not null,
+  created_at timestamptz not null default now()
+);
+alter table public.push_subs enable row level security;
+drop policy if exists "own alerts" on public.push_subs;
+create policy "own alerts" on public.push_subs for all to authenticated
+  using (user_id = auth.uid()) with check (user_id = auth.uid() and public.is_member());
+grant select, insert, update, delete on public.push_subs to authenticated;
+revoke all on public.push_subs from anon;
+
+create table if not exists public.push_log (deal_id text primary key, label text, sent_on date);   -- last alert told per deal
+alter table public.push_log enable row level security;                                              -- no policies: app can't read it
+revoke all on public.push_log from anon, authenticated;
+
+create schema if not exists private;
+revoke all on schema private from public, anon, authenticated;
+create table if not exists private.cfg (k text primary key, v text not null);
+-- insert into private.cfg values ('notify_url', 'https://<project-ref>.supabase.co/functions/v1/notify'), ('notify_secret', '<same as NOTIFY_SECRET>'), ('notify_auth', '<legacy anon key>')
+--   on conflict (k) do update set v = excluded.v;
+
+create or replace function private.notify(body jsonb) returns void
+  language plpgsql security definer set search_path = public, private as $$
+declare u text; s text; a text;
+begin
+  select v into u from private.cfg where k = 'notify_url';
+  select v into s from private.cfg where k = 'notify_secret';
+  select v into a from private.cfg where k = 'notify_auth';     -- the project's legacy anon key (public), so the function's JWT check passes
+  if u is null or s is null then return; end if;
+  perform net.http_post(url := u, body := body,
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-hipco-secret', s, 'Authorization', 'Bearer ' || coalesce(a, '')),
+    timeout_milliseconds := 10000);
+end $$;
+
+create or replace function private.kv_notify() returns trigger
+  language plpgsql security definer set search_path = public, private as $$
+begin
+  if coalesce(new.col, old.col) not in ('deals', 'clients') then return null; end if;
+  if tg_op = 'UPDATE' and old.data = new.data then return null; end if;
+  perform private.notify(jsonb_build_object('type', 'change', 'op', tg_op, 'col', coalesce(new.col, old.col), 'id', coalesce(new.id, old.id),
+    'old', case when tg_op = 'INSERT' then null else old.data end, 'new', case when tg_op = 'DELETE' then null else new.data end,
+    'by', coalesce(auth.uid(), case when tg_op = 'DELETE' then null else new.updated_by end)));
+  return null;
+end $$;
+drop trigger if exists kv_notify on public.kv;
+create trigger kv_notify after insert or update or delete on public.kv for each row execute function private.kv_notify();
+
+select cron.unschedule('hipco-daily-alerts') where exists (select 1 from cron.job where jobname = 'hipco-daily-alerts');
+select cron.schedule('hipco-daily-alerts', '0 6 * * *', $$ select private.notify('{"type":"scan"}'::jsonb) $$);   -- 06:00 UTC = 08:00 Beirut (winter)

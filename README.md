@@ -43,8 +43,18 @@ Keep *Authentication → Sign In / Providers → Allow new users to sign up* swi
 
 - 2026-10-26: Real logins (Supabase Auth) instead of a shared "secret header", because a header written in public code can be copied.
 - 2026-10-26: Libraries (supabase-js 2.117.3, SheetJS 0.18.5) are bundled in `vendor/` so the app works offline and does not depend on a CDN.
-- Push alerts (OneSignal) come in the next stage.
+- 2026-10-26: Push alerts built on standard Web Push + a Supabase Edge Function instead of OneSignal: free, no extra account, data stays in Supabase.
 
 ## Change log
 
 - v1 (2026-10-26): first standalone version of the deals page: sign-in, live data, attachments, offline, install to home screen.
+
+## Notifications
+
+- Every phone that taps **🔔 Turn on alerts** gets a notification for every change to a deal (new inquiry, offer sent, client signed,
+  mill PI, deposit, shipped, arrived, paid, lost, documents added…), except the person who made the change.
+- Every day at 08:00 Beirut a check sends reminders for actions that come due (red = urgent, repeated daily until done;
+  amber = this week, repeated every 3 days; purple = follow-up, once).
+- How: database trigger on `kv` → Edge Function `notify` (`supabase/functions/notify/index.ts`) → Web Push (free, no outside service).
+  Keys: `VAPID_PUBLIC` is in `config.js`; `VAPID_PRIVATE` and `NOTIFY_SECRET` are Edge Function secrets in Supabase only.
+- iPhone: alerts only work in the installed app (Add to Home Screen), iOS 16.4 or newer.

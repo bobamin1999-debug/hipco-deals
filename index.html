@@ -364,6 +364,7 @@ img{max-width:100%}
     </div>
     <div class="top-r">
       <span class="badge" id="mode">Loading</span>
+      <button class="btn primary" id="bell" type="button" hidden>🔔 Turn on alerts</button>
       <button class="btn" id="xl" type="button" hidden>Download Excel</button>
     </div>
   </header>
@@ -451,6 +452,7 @@ const TABS = ["home","inquiry","offer","signed","order","closed"];
 /* phone back button: business chooser is the root; then Overview {b}, a tab {t}, an open deal {m}.
    "back" closes the deal, then returns to Overview, then to the chooser. */
 S.tab = "home"; S.biz = null;
+let OPEN_DEAL = new URLSearchParams(location.search).get("deal");   // from a tapped notification
 try { history.replaceState(null, "", location.pathname); } catch (e) {}
 const kindOf = d => d.kind === "offshore" ? "offshore" : "local";
 const BIZ_NAME = {local:"Beirut", offshore:"Offshore"};
@@ -1253,6 +1255,42 @@ function setMode() { const m = $("#mode"); m.textContent = S.canWrite ? "You can
 const isStandalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
 let deferredInstall = null;
 window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); deferredInstall = e; showInstall(); });
+/* ------------------------------------------------------------------ push notifications */
+const pushOK = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const b64u = s => { const p = "=".repeat((4 - s.length % 4) % 4), r = atob((s + p).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(r, c => c.charCodeAt(0)); };
+async function pushSub() { if (!pushOK()) return null; const reg = await navigator.serviceWorker.ready; return reg.pushManager.getSubscription(); }
+async function setBell() {
+  const b = $("#bell"); if (!window.HIPCO.push || !(window.HIPCO_CONFIG || {}).vapidPublicKey) { b.hidden = true; return; }
+  b.hidden = false;
+  let on = false; try { on = pushOK() && Notification.permission === "granted" && !!(await pushSub()); } catch (e) {}
+  b.textContent = on ? "🔔 Alerts on" : "🔔 Turn on alerts"; b.className = "btn" + (on ? "" : " primary"); b.dataset.on = on ? "1" : "";
+  if (on) { try { const sub = await pushSub(); await window.HIPCO.push.save(sub.toJSON()); } catch (e) {} }   // keep this phone on the list
+}
+async function enableAlerts() {
+  const b = $("#bell");
+  if (b.dataset.on) { toast("Alerts are on for this phone. To stop them, turn off notifications for HIPCO Deals in the phone settings."); return; }
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  if (!pushOK()) { toast(ios && !isStandalone() ? "On iPhone, first add the app to your Home Screen (Share → Add to Home Screen), open it from the icon, then tap this again." : "This browser can't show notifications. Open the installed app instead."); return; }
+  if (Notification.permission === "denied") { toast("Notifications are blocked for this app. Allow them in the phone settings, then tap again."); return; }
+  b.disabled = true; b.textContent = "Turning on…";
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") { toast("Alerts stay off. Tap again and choose Allow."); return; }
+    const reg = await navigator.serviceWorker.ready;
+    const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: b64u(window.HIPCO_CONFIG.vapidPublicKey)});
+    await window.HIPCO.push.save(sub.toJSON());
+    toast("Alerts are on. This phone will be told about every change and reminder.");
+  } catch (e) { console.warn(e); toast("Couldn't turn alerts on. Check the connection and try again."); }
+  finally { b.disabled = false; setBell(); }
+}
+$("#bell").addEventListener("click", enableAlerts);
+function openDeal(id) {
+  const d = S.deals.get(id); if (!d) return false;
+  if (S.biz !== kindOf(d)) chooseBiz(kindOf(d));
+  showView(id); return true;
+}
+if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", e => { if (e.data && e.data.openDeal) { if (!openDeal(e.data.openDeal)) OPEN_DEAL = e.data.openDeal; } });
+
 function showInstall() {
   const box = $("#install"); if (isStandalone() || S.installHidden) { box.hidden = true; return; }
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -1263,7 +1301,9 @@ function showInstall() {
 }
 $("#install-btn").addEventListener("click", async () => { if (!deferredInstall) return; deferredInstall.prompt(); try { await deferredInstall.userChoice; } catch (e) {} deferredInstall = null; showInstall(); });
 $("#install-x").addEventListener("click", () => { S.installHidden = true; saveUI(); $("#install").hidden = true; });
-$("#signout").addEventListener("click", async () => { if (!confirmTwice($("#signout"), "Tap again to sign out")) return; await window.HIPCO.signOut(); location.reload(); });
+$("#signout").addEventListener("click", async () => { if (!confirmTwice($("#signout"), "Tap again to sign out")) return;
+  try { const sub = await pushSub(); if (sub) { await window.HIPCO.push.remove(sub.endpoint); await sub.unsubscribe(); } } catch (e) {}
+  await window.HIPCO.signOut(); location.reload(); });
 function confirmTwice(btn, msg) { if (btn.dataset.armed === "1") return true; const old = btn.textContent; btn.dataset.armed = "1"; btn.textContent = msg; setTimeout(() => { btn.dataset.armed = ""; btn.textContent = old; }, 4000); return false; }
 
 function showLogin(msg) {
@@ -1288,7 +1328,7 @@ async function start(u) {
   S.canWrite = await B.user.canEdit();
   $("#login").hidden = true; showChooser();
   $("#acct").textContent = `Signed in as ${B.user.email() || u.email}`;
-  setMode(); renderSettings(); showInstall();
+  setMode(); renderSettings(); showInstall(); setBell();
   const b = $("#xl"); b.hidden = false; b.onclick = exportExcel;
   B.onStatus(st => { const el = $("#sync"); el.className = "sync" + (!st.online || st.pending ? " off" : "");
     el.textContent = !st.online ? `· Offline${st.pending ? `, ${st.pending} change${st.pending===1?"":"s"} saved on this phone` : ""}` : st.pending ? `· Sending ${st.pending} change${st.pending===1?"":"s"}…` : "· Up to date"; });
@@ -1298,6 +1338,7 @@ async function start(u) {
     const m = new Map(); snap.docs.forEach(doc => m.set(doc.id, {...doc.data(), _id: doc.id}));
     S.deals = m; S.loaded = true;
     render(); refreshOpen();
+    if (OPEN_DEAL && openDeal(OPEN_DEAL)) OPEN_DEAL = null;
   });
 }
 async function boot() {

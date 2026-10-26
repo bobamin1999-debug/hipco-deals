@@ -197,6 +197,13 @@
       } catch (e) { if (!role) throw e; }   // offline: keep the role saved on this phone
       return role;
     },
+    push: {   // this phone's notification address, so the server can send it alerts
+      async save(sub) {
+        const {error} = await timeout(client().from("push_subs").upsert({endpoint: sub.endpoint, sub}));
+        if (error) throw error;
+      },
+      async remove(endpoint) { await timeout(client().from("push_subs").delete().eq("endpoint", endpoint)); }
+    },
     connect() {
       const store = makeStore(), {files, assets} = makeFiles();
       return {db: store.db, files, assets: role === "editor" ? assets : null, downloads, onStatus: store.onStatus,

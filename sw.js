@@ -1,7 +1,7 @@
 /* HIPCO Deals service worker: opens fast and works offline.
    App files: newest from the network, but if the network takes more than 3 s use the saved copy.
    Change VERSION on every release so phones pick up the new files. */
-const VERSION = "hipco-deals-v5";
+const VERSION = "hipco-deals-v6";
 const SHELL = ["./", "index.html", "config.js", "db.js", "manifest.json", "vendor/supabase.js",
   "icons/logo.png", "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png"];
 
@@ -38,11 +38,20 @@ self.addEventListener("fetch", e => {
   /* database, login and file requests always go straight to the network */
 });
 
-/* tapping a notification opens or focuses the app (used once alerts are switched on) */
+/* a notification from the server: show it */
+self.addEventListener("push", e => {
+  let m = {}; try { m = e.data ? e.data.json() : {}; } catch (err) { m = {body: e.data ? e.data.text() : ""}; }
+  e.waitUntil(self.registration.showNotification(m.title || "HIPCO Deals", {
+    body: m.body || "", icon: "icons/icon-192.png", badge: "icons/icon-192.png", data: {url: m.url || "./"}
+  }));
+});
+/* tapping a notification opens the app on that deal */
 self.addEventListener("notificationclick", e => {
   e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || "./";
+  const id = new URL(url, self.location.href).searchParams.get("deal");
   e.waitUntil(self.clients.matchAll({type: "window", includeUncontrolled: true}).then(list => {
-    for (const c of list) { if ("focus" in c) return c.focus(); }
-    return self.clients.openWindow("./");
+    for (const c of list) { if ("focus" in c) { if (id) c.postMessage({openDeal: id}); return c.focus(); } }
+    return self.clients.openWindow(url);
   }));
 });
