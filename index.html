@@ -244,6 +244,29 @@ button.st:hover{border-color:var(--brand);color:var(--brand);background:var(--sk
 .kv b{font-weight:500;overflow-wrap:anywhere}
 .v-notes{white-space:pre-wrap;font-size:13px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:0}
 
+/* overview */
+.ov{display:flex;flex-direction:column;gap:14px}
+.ov-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+.ov-card > h3{margin:0;padding:12px 16px;font-family:var(--f-display);font-size:21px;color:var(--brand);border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px}
+.ov-card > h3 small{font-family:var(--f-body);font-size:12.5px;color:var(--muted);font-weight:400}
+.ov-card details{border-bottom:1px solid var(--line)}
+.ov-card details:last-child{border-bottom:0}
+.ov-card summary{list-style:none;cursor:pointer;padding:11px 16px;display:flex;align-items:center;gap:10px;font-weight:600;font-size:14px}
+.ov-card summary::-webkit-details-marker{display:none}
+.ov-card summary::after{content:"›";margin-left:auto;color:var(--muted);font-size:18px;transition:transform .15s}
+.ov-card details[open] summary::after{transform:rotate(90deg)}
+.ov-card summary .n{margin-left:auto;font-family:var(--f-display);font-size:20px;color:var(--brand)}
+.ov-card summary .dot{width:10px;height:10px;border-radius:50%;flex:0 0 10px}
+.ov-list{display:flex;flex-direction:column;padding:0 8px 8px}
+.ov-row{border:0;background:transparent;text-align:left;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:2px 10px;align-items:center;padding:8px;border-radius:8px;width:100%}
+.ov-row:hover{background:var(--sky)}
+.ov-row .r{font-family:var(--f-mono);font-size:12px;color:var(--muted);white-space:nowrap}
+.ov-row .c{font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ov-row .h{grid-column:2 / 4;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ov-row .chip{font-size:11.5px;padding:2px 7px}
+.dot.l1{background:var(--red)} .dot.l2{background:var(--amber)} .dot.l3{background:var(--violet)} .dot.l4{background:var(--brand)}
+.ov-empty{padding:12px 16px;color:var(--muted);font-size:13px}
+
 /* pages (tabs) */
 .tabs{display:flex;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:4px;box-shadow:var(--shadow);position:sticky;top:env(safe-area-inset-top,0px);z-index:6}
 .tabs button{flex:1 1 0;min-width:0;border:0;background:transparent;border-radius:9px;padding:8px 6px;display:flex;flex-direction:column;align-items:center;gap:1px;color:var(--muted);font-size:12.5px;font-weight:500}
@@ -714,16 +737,8 @@ function render() {
     return `<button type="button" data-tab="${k}" ${S.tab===k?'aria-current="page"':""}><b>${n}</b><span class="tl">${TAB_LBL[k]}${u?` <span class="dotn">${u}</span>`:""}</span></button>`;
   }).join("");
   const home = S.tab === "home";
-  $("#pipe").hidden = !home; $("#attn").hidden = !home;
-  if (home) {
-    const list = open.filter(visible).filter(d => S.fl ? true : d._a.level === 1 || d._a.level === 2).sort(cmp);
-    const title = S.fl ? {"1":"Urgent","2":"This week","3":"Sales follow-up","arr":"Arriving in 30 days"}[S.fl] : "Needs attention";
-    const lim = S.limit.home || 60;
-    $("#bands").innerHTML = `<section class="band"><div class="page-h"><h2>${esc(title)}</h2><span class="meta">${list.length} deal${list.length===1?"":"s"} · tap one to open it</span></div>
-      ${list.length ? `<div class="list">${list.slice(0, lim).map(rowHTML).join("")}</div>` + (list.length > lim ? `<div class="more"><button type="button" class="btn" data-more="home">Show ${list.length - lim} more</button></div>` : "")
-                    : `<div class="empty"><span>Nothing needs attention right now.</span></div>`}</section>`;
-    return;
-  }
+  $("#pipe").hidden = !home; $("#attn").hidden = true; $("#tools").hidden = home;
+  if (home) { $("#bands").innerHTML = overviewHTML(all, open); return; }
   const s = STAGES.find(x => x.key === S.tab), inStage = all.filter(d => d.stage === s.key);
   const list = inStage.filter(visible).sort(cmp), lim = S.limit[s.key] || 80;
   const add = S.canWrite && s.add ? `<button type="button" class="btn sm primary" data-new="${s.key}">+ ${esc(s.add)}</button>` : "";
@@ -735,6 +750,37 @@ function render() {
     (list.length > lim ? `<div class="more"><button type="button" class="btn" data-more="${s.key}">Show ${list.length - lim} more</button></div>` : "");
   $("#bands").innerHTML = `<section class="band" data-stage="${s.key}"><div class="page-h"><h2>${esc(s.title)}</h2>
     <span class="meta">${inStage.length ? `${inStage.length} · ${esc(totalsText(inStage))}${filtered} · ` : ""}${esc(s.sub)}</span><span style="flex:1"></span>${inStage.length?add:""}</div>${body}</section>`;
+}
+function ovRow(d, chipLabel, cls, hint) {
+  return `<button type="button" class="ov-row" data-open="${esc(d._id)}"><span class="chip ${cls}">${esc(chipLabel)}</span><span class="c">${esc(d.client)}</span><span class="r">${esc(d.ref || ("Inq #" + (d.inqNo || "")))}</span>${hint ? `<span class="h">${esc(hint)}</span>` : ""}</button>`;
+}
+function ovGroup(title, dotCls, rows, open) {
+  return `<details ${open && rows.length ? "open" : ""}><summary><span class="dot ${dotCls}"></span>${esc(title)}<span class="n">${rows.length}</span></summary>
+    <div class="ov-list">${rows.join("") || `<span class="ov-empty">Nothing here.</span>`}</div></details>`;
+}
+const DOC_RULES = [
+  ["offer", "Offer sent", d => SIDX[d.stage === "closed" ? (d.prevStage || "order") : d.stage] >= 1 && d.kind !== "offshore"],
+  ["signed", "Signed offer", d => SIDX[d.stage === "closed" ? (d.prevStage || "order") : d.stage] >= 2],
+  ["pi", "Mill PI (signed)", d => SIDX[d.stage === "closed" ? (d.prevStage || "order") : d.stage] >= 3],
+  ["deposit", "Deposit proof", d => !!d.depositOn],
+  ["shipping", "B/L & shipping docs", d => isShipped(d)],
+  ["payment", "Final payment proof", d => !!d.paidOn]
+];
+function overviewHTML(all, open) {
+  const lv = l => open.filter(d => d._a.level === l).sort(cmp);
+  const row = d => ovRow(d, d._a.label, d._a.level > 0 ? `l${d._a.level}` : "l0", d._a.hint || d.product || "");
+  const arriving = open.filter(d => d.stage === "order" && !isArrived(d) && dn(d.eta) != null && dn(d.eta) - T() <= 30).sort((a, b) => dn(a.eta) - dn(b.eta));
+  const actions = `<section class="ov-card"><h3>Actions needed <small>tap a deal to open it</small></h3>
+    ${ovGroup("Urgent", "l1", lv(1).map(row), true)}
+    ${ovGroup("This week", "l2", lv(2).map(row), false)}
+    ${ovGroup("Sales follow-up", "l3", lv(3).map(row), false)}
+    ${ovGroup("Arriving in the next 30 days", "l4", arriving.map(d => ovRow(d, `ETA ${fD(d.eta)}`, isShipped(d) ? "l0" : "l2", `${d.product || ""}${isShipped(d) ? " · shipped" : " · no B/L yet"}`)), false)}
+  </section>`;
+  const docs = DOC_RULES.map(([cat, name, applies]) => {
+    const miss = open.filter(applies).filter(d => !filesOf(d).some(f => f.cat === cat)).sort(cmp);
+    return ovGroup(`${name} missing`, "l4", miss.map(d => ovRow(d, STAGES.find(x => x.key === d.stage).short, "lx", d.product || "")), false);
+  }).join("");
+  return `<div class="ov">${actions}<section class="ov-card"><h3>Missing documents <small>deals past a step without its file</small></h3>${docs}</section></div>`;
 }
 function goTab(k) {
   if (!TABS.includes(k)) k = "home";
