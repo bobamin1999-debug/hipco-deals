@@ -1,0 +1,1173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>HIPCO Deals</title>
+<meta name="description" content="HIPCO deal tracker: inquiries, offers, signed offers, orders and payments.">
+<meta name="theme-color" content="#1F4283">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="HIPCO Deals">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one order book read top to bottom, in HIPCO white and blue. Each stage is a light-blue band
+   (inquiries -> offers -> signed -> orders -> closed); each deal is a white docket strip whose left edge shows urgency.
+   Deliberately light-only: HIPCO's own white-and-blue look on every device. */
+:root{
+  color-scheme:light;
+  --bg:#F5F8FD; --surface:#FFFFFF; --sky:#EAF1FB; --sky-2:#D6E5F8; --ink:#0B1A3F; --muted:#56678A; --line:#D9E4F2; --line-2:#B8CBE6;
+  --brand:#1F4283; --brand-hover:#173670; --brand-ink:#FFFFFF; --link:#2459B8;
+  --red:#B0374A; --red-bg:#FBE8EB; --amber:#9A6A06; --amber-bg:#FDF2D8; --violet:#6B3FD1; --violet-bg:#F0EAFD; --green:#146B3A; --green-bg:#E3F4EA;
+  --shadow:0 1px 2px rgba(11,26,63,.05),0 6px 18px rgba(31,66,131,.07);
+  --f-display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --f-body:"IBM Plex Sans",-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:18px 96px}
+.wrap{max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--link);outline-offset:2px}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.num{font-variant-numeric:tabular-nums}
+
+/* header */
+.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 18px;box-shadow:var(--shadow)}
+.brand{display:flex;align-items:center;gap:16px;min-width:0}
+.brand img{height:44px;width:auto;display:block}
+.brand .ttl{border-left:1px solid var(--line);padding-left:16px;min-width:0}
+.brand h1{font-family:var(--f-display);font-weight:700;font-size:28px;letter-spacing:.02em;line-height:1;margin:0;color:var(--brand);text-wrap:balance}
+.brand p{margin:3px 0 0;color:var(--muted);font-size:12.5px}
+.top-r{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.badge{font-size:11.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:4px 10px;border-radius:999px;background:var(--sky);color:var(--muted)}
+.badge.edit{background:var(--green-bg);color:var(--green)}
+.btn{border:1px solid var(--line-2);background:var(--surface);color:var(--brand);border-radius:8px;padding:7px 12px;font-weight:500;font-size:13px;white-space:nowrap}
+.btn:hover{background:var(--sky)}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:var(--brand-ink)}
+.btn.primary:hover{background:var(--brand-hover)}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--muted)}
+.btn.ghost:hover{color:var(--brand);background:var(--sky)}
+.btn.sm{padding:5px 9px;font-size:12.5px;border-radius:7px}
+.btn.danger{color:var(--red);border-color:var(--red)}
+.btn:disabled{opacity:.55;cursor:default}
+
+/* summary */
+.pipe{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow)}
+.pipe button{border:0;background:transparent;text-align:left;padding:12px 16px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:2px;min-width:0;position:relative}
+.pipe button:last-child{border-right:0}
+.pipe button:hover{background:var(--sky)}
+.pipe .k{font-size:11.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.pipe .n{font-family:var(--f-display);font-weight:700;font-size:32px;line-height:1.05;color:var(--brand)}
+.pipe .v{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pipe button:not(:last-child)::after{content:"";position:absolute;right:-7px;top:50%;width:12px;height:12px;border-top:1px solid var(--line);border-right:1px solid var(--line);background:var(--surface);transform:translateY(-50%) rotate(45deg);z-index:1}
+.pipe button:hover::after{background:var(--sky)}
+.attn{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.attn .lbl{font-size:11.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-right:4px}
+.fchip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;font-size:13px;display:inline-flex;gap:8px;align-items:center}
+.fchip:hover{border-color:var(--line-2)}
+.fchip b{font-variant-numeric:tabular-nums}
+.fchip .dot{width:9px;height:9px;border-radius:50%}
+.fchip[aria-pressed="true"]{border-color:var(--brand);box-shadow:inset 0 0 0 1px var(--brand);background:var(--sky)}
+.dot.l1{background:var(--red)} .dot.l2{background:var(--amber)} .dot.l3{background:var(--violet)} .dot.l4{background:var(--link)}
+
+/* toolbar */
+.tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:8px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.tools input[type=search]{flex:1 1 220px;min-width:0;border:1px solid var(--line-2);background:var(--surface);border-radius:8px;padding:7px 11px}
+.tools select{border:1px solid var(--line-2);background:var(--surface);border-radius:8px;padding:7px 9px}
+.tools label.chk{display:inline-flex;gap:6px;align-items:center;font-size:13px;color:var(--muted)}
+
+/* stage bands */
+.band{display:flex;flex-direction:column;gap:7px;scroll-margin-top:64px}
+.band-h{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:8px 12px;background:var(--sky);border:1px solid var(--sky-2);border-radius:10px}
+.band[data-stage=closed] .band-h{background:var(--surface);border-color:var(--line)}
+.band-h h2{font-family:var(--f-display);font-weight:700;font-size:22px;letter-spacing:.02em;margin:0;line-height:1.1;display:flex;gap:10px;align-items:baseline;color:var(--brand)}
+.band-h h2 .step{font-family:var(--f-mono);font-size:12px;font-weight:500;color:var(--link)}
+.band-h .meta{color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
+.band-h .sp{flex:1}
+.band-h .tog{border:0;background:transparent;color:var(--muted);font-size:13px;padding:4px 6px}
+.empty{border:1px dashed var(--line-2);background:var(--surface);border-radius:10px;padding:14px 16px;color:var(--muted);display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+
+/* deal rows */
+.list{display:flex;flex-direction:column;gap:6px}
+.deal{background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--line);border-radius:9px;
+  display:grid;grid-template-columns:minmax(200px,1.7fr) 92px 128px minmax(190px,1.4fr) minmax(170px,1.1fr) auto;gap:6px 14px;align-items:center;padding:9px 12px}
+.deal:hover{border-color:var(--line-2)}
+.deal.l1{border-left-color:var(--red)} .deal.l2{border-left-color:var(--amber)} .deal.l3{border-left-color:var(--violet)} .deal.l0{border-left-color:var(--green)}
+.deal.closed{border-left-color:var(--line-2)}
+.d-open{border:0;background:transparent;text-align:left;padding:0;display:flex;flex-direction:column;gap:1px;min-width:0}
+.d-open:hover .d-client{color:var(--link);text-decoration:underline;text-underline-offset:3px}
+.d-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.d-ref{font-family:var(--f-mono);font-size:12.5px;color:var(--muted)}
+.tag{font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:1px 6px;border-radius:4px;background:var(--sky);color:var(--muted)}
+.tag.off{background:var(--sky-2);color:var(--brand)}
+.clip{display:inline-flex;align-items:center;gap:3px;font-size:11.5px;color:var(--link);font-weight:600}
+.clip svg{width:13px;height:13px}
+.d-client{font-weight:600;font-size:14.5px;overflow-wrap:anywhere;color:var(--ink)}
+.d-prod{color:var(--muted);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.d-who{font-size:13px;color:var(--muted)}
+.d-who.none{color:var(--violet);font-weight:500}
+.d-val{display:flex;flex-direction:column;align-items:flex-end;font-variant-numeric:tabular-nums}
+.d-val b{font-weight:600}
+.d-val span{font-size:12px;color:var(--muted)}
+.d-info{font-size:12.5px;color:var(--muted);min-width:0;display:flex;flex-direction:column;gap:3px}
+.d-info .ln{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.d-info b{color:var(--ink);font-weight:500}
+.steps{display:flex;flex-wrap:wrap;gap:4px}
+.st{font-size:11.5px;border-radius:6px;padding:2px 7px;border:1px solid var(--line-2);background:transparent;color:var(--muted);white-space:nowrap}
+.st.done{background:var(--green-bg);border-color:transparent;color:var(--green)}
+button.st:hover{border-color:var(--brand);color:var(--brand);background:var(--sky)}
+.d-alert{display:flex;flex-direction:column;gap:2px;min-width:0}
+.chip{display:inline-block;align-self:flex-start;font-size:12.5px;font-weight:600;border-radius:6px;padding:3px 8px;line-height:1.3}
+.chip.l1{background:var(--red-bg);color:var(--red)} .chip.l2{background:var(--amber-bg);color:var(--amber)} .chip.l3{background:var(--violet-bg);color:var(--violet)} .chip.l0{background:var(--green-bg);color:var(--green)}
+.chip.lx{background:var(--sky);color:var(--muted)}
+.d-alert small{color:var(--muted);font-size:12px}
+.d-act{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+.more{display:flex;justify-content:center}
+
+@media (max-width:980px){
+  .deal{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"open val" "who who" "info info" "alert alert" "act act"}
+  .d-open{grid-area:open} .d-val{grid-area:val} .d-who{grid-area:who} .d-info{grid-area:info} .d-alert{grid-area:alert} .d-act{grid-area:act;justify-content:flex-start}
+  .d-prod{white-space:normal}
+  .d-who:empty{display:none}
+}
+@media (max-width:720px){
+  .pipe{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .pipe button{border-right:0;border-bottom:1px solid var(--line)}
+  .pipe button:nth-child(odd){border-right:1px solid var(--line)}
+  .pipe button::after{display:none}
+  .pipe button:last-child{grid-column:1 / -1;border-bottom:0}
+  .brand img{height:34px}
+  .brand h1{font-size:24px}
+  .brand .ttl{padding-left:12px}
+}
+
+/* modal */
+.scrim{position:fixed;inset:0;background:rgba(11,26,63,.35);z-index:50;display:flex;align-items:flex-start;justify-content:center;
+  padding:max(24px,env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) max(24px,env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px));overflow-y:auto}
+.modal{background:var(--surface);color:var(--ink);border-radius:14px;width:min(680px,100%);box-shadow:0 20px 60px rgba(11,26,63,.25);border:1px solid var(--line)}
+.modal header{padding:18px 20px 8px;border-bottom:1px solid var(--line);background:var(--sky);border-radius:14px 14px 0 0}
+.modal h3{font-family:var(--f-display);font-size:24px;font-weight:700;margin:0;line-height:1.1;color:var(--brand)}
+.modal header p{margin:4px 0 0;color:var(--muted);font-size:13px}
+.m-body{padding:12px 20px 6px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px}
+.m-body h4{grid-column:1 / -1;margin:12px 0 0;font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--link);border-top:1px solid var(--line);padding-top:12px}
+.m-body h4:first-of-type{border-top:0;padding-top:0}
+.fld{display:flex;flex-direction:column;gap:4px;min-width:0}
+.fld.wide{grid-column:1 / -1}
+.fld label{font-size:12.5px;font-weight:500;color:var(--muted)}
+.fld input,.fld select,.fld textarea{border:1px solid var(--line-2);background:var(--surface);border-radius:8px;padding:8px 10px;width:100%;min-width:0}
+.fld textarea{min-height:64px;resize:vertical}
+.fld .hint{font-size:11.5px;color:var(--muted)}
+.fld.chkf{flex-direction:row;align-items:center;gap:8px}
+.fld.chkf input{width:auto}
+.modal footer{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:14px 20px 18px;border-top:1px solid var(--line)}
+.modal footer .sp{flex:1}
+#m-err{color:var(--red);font-size:13px;flex-basis:100%}
+#m-err:empty{display:none}
+@media (max-width:560px){.m-body{grid-template-columns:minmax(0,1fr)}}
+
+/* file picker in step forms */
+.pick{display:flex;flex-direction:column;gap:6px;border:1px dashed var(--line-2);background:var(--bg);border-radius:10px;padding:10px 12px}
+.pick .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.pick input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.pick .chosen{font-size:12.5px;color:var(--ink)}
+.pick .chosen:empty::before{content:"No file chosen";color:var(--muted)}
+
+/* attachments in the deal view */
+.att{grid-column:1 / -1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+@media (max-width:560px){.att{grid-template-columns:minmax(0,1fr)}}
+.att-g{border:1px solid var(--line);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:6px;min-width:0;background:var(--surface)}
+.att-g.has{background:var(--bg)}
+.att-h{display:flex;align-items:center;gap:8px;justify-content:space-between}
+.att-h b{font-size:12.5px;font-weight:600;color:var(--ink)}
+.att-h .cnt{font-size:11.5px;color:var(--muted)}
+.att-add{font-size:12px;font-weight:600;color:var(--link);border:1px solid var(--line-2);border-radius:6px;padding:2px 8px;background:var(--surface);cursor:pointer;white-space:nowrap}
+.att-add:hover{background:var(--sky)}
+.att-add input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.att-i{display:flex;align-items:center;gap:8px;min-width:0}
+.att-i .th{width:34px;height:34px;flex:0 0 34px;border-radius:6px;border:1px solid var(--line);background:var(--sky);display:grid;place-items:center;overflow:hidden;font-family:var(--f-mono);font-size:9.5px;font-weight:500;color:var(--brand)}
+.att-i .th img{width:100%;height:100%;object-fit:cover}
+.att-i .nm{flex:1;min-width:0;display:flex;flex-direction:column}
+.att-i .nm a{color:var(--link);font-size:12.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-decoration:none}
+.att-i .nm a:hover{text-decoration:underline}
+.att-i .nm span{font-size:11px;color:var(--muted)}
+.att-i .x{border:0;background:transparent;color:var(--muted);font-size:12px;padding:2px 4px}
+.att-i .x:hover{color:var(--red)}
+.att-empty{font-size:12px;color:var(--muted)}
+.att-busy{font-size:12px;color:var(--link)}
+
+/* deal page (view) */
+.modal.wide-m{width:min(900px,100%)}
+.deal{cursor:pointer}
+.view{grid-column:1 / -1;display:flex;flex-direction:column;gap:14px;min-width:0}
+.v-top{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.v-top .st-big{display:flex;flex-direction:column;gap:3px;min-width:0}
+.v-top .st-big small{color:var(--muted);font-size:12.5px}
+.v-top .money{display:flex;gap:18px;flex-wrap:wrap}
+.v-top .money div{display:flex;flex-direction:column}
+.v-top .money span{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.v-top .money b{font-family:var(--f-display);font-size:22px;font-weight:700;color:var(--brand);font-variant-numeric:tabular-nums;line-height:1.1}
+.v-top .qa{display:flex;gap:6px;flex-wrap:wrap}
+.v-h{margin:0;font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--link)}
+.tl{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.tl-s{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:4px 12px;padding:10px 0;position:relative}
+.tl-s:not(:last-child)::before{content:"";position:absolute;left:14px;top:38px;bottom:-6px;width:2px;background:var(--line)}
+.tl-s.done:not(:last-child)::before{background:var(--green)}
+.tl-dot{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:600;border:2px solid var(--line-2);background:var(--surface);color:var(--muted);position:relative;z-index:1}
+.tl-s.done .tl-dot{background:var(--green);border-color:var(--green);color:#FFFFFF}
+.tl-s.next .tl-dot{border-color:var(--brand);color:var(--brand);box-shadow:0 0 0 4px var(--sky)}
+.tl-c{display:flex;flex-direction:column;gap:5px;min-width:0;padding-top:4px}
+.tl-t{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}
+.tl-t b{font-size:14px;font-weight:600}
+.tl-s.todo .tl-t b{color:var(--muted);font-weight:500}
+.tl-t span{font-size:12.5px;color:var(--muted)}
+.tl-s.done .tl-t span{color:var(--green);font-weight:500}
+.tl-s.next .tl-t span{color:var(--brand);font-weight:600}
+.tl-meta{font-size:12.5px;color:var(--muted)}
+.tl-files{display:flex;flex-direction:column;gap:6px}
+.tl-a{display:flex;gap:6px;align-items:flex-start;flex-wrap:wrap;justify-content:flex-end;padding-top:2px}
+@media (max-width:620px){.tl-s{grid-template-columns:30px minmax(0,1fr)}.tl-a{grid-column:2;justify-content:flex-start}}
+.kvs{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px}
+.kv-card{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.kv-card h5{margin:0 0 2px;font-size:12px;font-weight:600;color:var(--brand)}
+.kv{display:grid;grid-template-columns:minmax(96px,40%) minmax(0,1fr);gap:8px;font-size:13px}
+.kv span{color:var(--muted)}
+.kv b{font-weight:500;overflow-wrap:anywhere}
+.v-notes{white-space:pre-wrap;font-size:13px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:0}
+
+/* toast */
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:60;background:var(--brand);color:#FFFFFF;
+  border-radius:10px;padding:10px 12px 10px 16px;display:flex;gap:12px;align-items:center;box-shadow:0 10px 30px rgba(11,26,63,.25);max-width:calc(100% - 32px);font-size:13.5px}
+.toast button{border:0;background:transparent;color:#FFFFFF;font-weight:600;text-decoration:underline;text-underline-offset:3px}
+
+.note{color:var(--muted);font-size:12.5px}
+.status{padding:28px;text-align:center;color:var(--muted);border:1px dashed var(--line-2);border-radius:12px;background:var(--surface)}
+footer.foot{display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--line);padding-top:14px}
+details.settings summary{cursor:pointer;color:var(--muted);font-size:13px}
+.set-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:10px}
+@media (prefers-reduced-motion:no-preference){.deal{transition:border-color .2s}.toast{animation:up .18s ease-out}@keyframes up{from{transform:translate(-50%,8px);opacity:0}}}
+
+/* standalone app: page frame, sign-in, install help, sync */
+html{-webkit-text-size-adjust:100%}
+body{margin:0;padding-top:calc(18px + env(safe-area-inset-top,0px));padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
+img{max-width:100%}
+.login{min-height:70vh;display:grid;place-items:center}
+.login-card{width:min(400px,100%);background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:26px 22px;display:flex;flex-direction:column;gap:14px}
+.login-card img{height:52px;width:auto;align-self:flex-start}
+.login-card h1{font-family:var(--f-display);font-size:28px;margin:0;color:var(--brand)}
+.login-card p{margin:0;color:var(--muted);font-size:13.5px}
+.login-card .fld input{font-size:16px}
+.login-card .err{color:var(--red);font-size:13px;min-height:1em}
+.login-card .btn{padding:10px 14px;font-size:15px}
+.install{display:flex;gap:12px;align-items:flex-start;background:var(--sky);border:1px solid var(--sky-2);border-radius:12px;padding:10px 14px;font-size:13px;color:var(--ink)}
+.install b{color:var(--brand)}
+.install .sp{flex:1}
+.sync{font-size:12px;color:var(--muted)}
+.sync.off{color:var(--amber);font-weight:600}
+.acct{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:12.5px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<section class="login" id="login" hidden>
+  <form class="login-card" id="login-form" novalidate>
+    <img src="icons/logo.png" alt="HIPCO, Hammoud International Paper SAL">
+    <h1>Deals</h1>
+    <p id="login-msg">Sign in with the email and password Bob gave you. You only do this once on each phone.</p>
+    <div class="fld" id="login-fields"><label for="l-email">Email</label><input type="email" id="l-email" autocomplete="username" inputmode="email" required></div>
+    <div class="fld" id="login-pw"><label for="l-pass">Password</label><input type="password" id="l-pass" autocomplete="current-password" required></div>
+    <span class="err" id="login-err"></span>
+    <button type="submit" class="btn primary" id="login-btn">Sign in</button>
+  </form>
+</section>
+
+<div class="wrap" id="app" hidden>
+  <header class="top">
+    <div class="brand">
+      <img src="icons/logo.png" alt="HIPCO, Hammoud International Paper SAL" width="118" height="44">
+      <div class="ttl">
+        <h1>Deals</h1>
+        <p id="sub">Inquiry → offer → signed → order → paid</p>
+      </div>
+    </div>
+    <div class="top-r">
+      <span class="badge" id="mode">Loading</span>
+      <button class="btn" id="xl" type="button" hidden>Download Excel</button>
+    </div>
+  </header>
+
+  <div class="install" id="install" hidden>
+    <span id="install-txt"></span><span class="sp"></span>
+    <button type="button" class="btn sm primary" id="install-btn" hidden>Install</button>
+    <button type="button" class="btn sm ghost" id="install-x">Hide</button>
+  </div>
+
+  <nav class="pipe" id="pipe" aria-label="Deals by stage"></nav>
+
+  <div class="attn" id="attn"></div>
+
+  <div class="tools" id="tools">
+    <input type="search" id="q" placeholder="Search client, ref, product, B/L…" aria-label="Search deals">
+    <select id="fs" aria-label="Salesman"><option value="">All salesmen</option></select>
+    <label class="chk"><input type="checkbox" id="fc"> Show closed</label>
+  </div>
+
+  <main id="bands"><div class="status" id="status">Loading deals…</div></main>
+
+  <footer class="foot">
+    <p class="note">Red = urgent · amber = this week · purple = sales follow-up · green = on track. Tap any deal to open it: progress, documents and every detail.</p>
+    <div class="acct"><span id="acct"></span><span class="sync" id="sync"></span><span style="flex:1"></span><button type="button" class="btn sm ghost" id="signout">Sign out</button></div>
+    <details class="settings" id="setbox" hidden>
+      <summary>Settings: reminder days and salesmen</summary>
+      <form id="setform" class="set-grid"></form>
+    </details>
+  </footer>
+</div>
+
+<div class="scrim" id="scrim" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="m-title">
+    <form id="m-form" novalidate>
+      <header><h3 id="m-title"></h3><p id="m-sub"></p></header>
+      <div class="m-body" id="m-body"></div>
+      <footer>
+        <span id="m-err"></span>
+        <button type="button" class="btn danger sm" id="m-del" hidden>Delete deal</button>
+        <span class="sp"></span>
+        <button type="button" class="btn" id="m-cancel">Cancel</button>
+        <button type="submit" class="btn primary" id="m-ok">Save</button>
+      </footer>
+    </form>
+  </div>
+</div>
+<div class="toast" id="toast" hidden role="status"><span id="t-msg"></span><button type="button" id="t-undo" hidden>Undo</button></div>
+
+<script src="config.js"></script>
+<script src="vendor/supabase.js"></script>
+<script src="db.js"></script>
+<script>
+(() => {
+"use strict";
+/* ------------------------------------------------------------------ constants */
+const STAGES = [
+  {key:"inquiry", title:"Pending inquiries", short:"Inquiries", add:"New inquiry", sub:"from the salesmen"},
+  {key:"offer",   title:"Pending offers",    short:"Pending offers", add:"New offer", sub:"sent, waiting for the client"},
+  {key:"signed",  title:"Signed offers",     short:"Signed", sub:"client signed, waiting for the mill"},
+  {key:"order",   title:"Orders",            short:"Orders", add:"New order", sub:"deposit · shipment · arrival · payment"},
+  {key:"closed",  title:"Closed",            short:"Closed", sub:"paid or lost"}
+];
+const DEFAULTS = {remindDays:14, dueRemindDays:7, followDays:7, inquiryDays:3, blWarnDays:30,
+  salesmen:["Ahmad","Ali","Mohamad","Nadine","Ouseili","Soha","Wissam"]};
+/* attachment categories, in the order a deal produces them */
+const CATS = [
+  ["inquiry","Inquiry / client request"], ["offer","Offer sent"], ["signed","Signed offer"], ["pi","Mill PI (signed)"],
+  ["deposit","Deposit proof"], ["shipping","B/L & shipping docs"], ["invoice","Invoice"], ["payment","Final payment proof"], ["other","Other"]
+];
+const CAT_NAME = Object.fromEntries(CATS);
+const OK_TYPES = ["application/pdf","image/png","image/jpeg","image/gif","image/webp","video/mp4","video/webm","text/csv","text/plain","text/markdown","application/json"];
+const EXT_TYPE = {pdf:"application/pdf",png:"image/png",jpg:"image/jpeg",jpeg:"image/jpeg",gif:"image/gif",webp:"image/webp",mp4:"video/mp4",webm:"video/webm",csv:"text/csv",txt:"text/plain",md:"text/markdown",json:"application/json"};
+const TYPE_EXT = {"application/pdf":"pdf","image/png":"png","image/jpeg":"jpg","image/gif":"gif","image/webp":"webp","video/mp4":"mp4","video/webm":"webm","text/csv":"csv","text/plain":"txt","text/markdown":"md","application/json":"json"};
+const ACCEPT = "application/pdf,image/*,.pdf,.png,.jpg,.jpeg,.webp,.gif,.heic,.heif,.csv,.txt";
+const MAXB = 20 * 1024 * 1024;
+const CLIP = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.4 11.1l-8.5 8.5a5.5 5.5 0 0 1-7.8-7.8l8.5-8.5a3.7 3.7 0 0 1 5.2 5.2l-8.5 8.5a1.8 1.8 0 0 1-2.6-2.6l7.8-7.8"/></svg>`;
+
+/* ------------------------------------------------------------------ state */
+const S = {db:null, files:null, assets:null, downloads:null, canWrite:false, loaded:false, deals:new Map(), clients:new Map(), cfg:{...DEFAULTS},
+  q:"", fs:"", fl:"", showClosed:false, collapsed:{}, limit:{}, openId:null, busy:{}};
+try { const c = JSON.parse(localStorage.getItem("hipco-deals-ui")||"{}"); S.collapsed = c.collapsed||{}; S.installHidden = !!c.installHidden; } catch(e) {}
+const saveUI = () => { try { localStorage.setItem("hipco-deals-ui", JSON.stringify({collapsed:S.collapsed, installHidden:!!S.installHidden})); } catch(e) {} };
+
+/* ------------------------------------------------------------------ helpers */
+const $ = s => document.querySelector(s);
+const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pad = n => String(n).padStart(2,"0");
+const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; };
+const dn = iso => { if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null; const [y,m,d] = iso.split("-").map(Number); return Date.UTC(y,m-1,d)/864e5; };
+const isoOf = n => { const d = new Date(n*864e5); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())}`; };
+const fD = iso => { if (!iso) return ""; const p = iso.split("-"); return p.length===3 ? `${p[2]}.${p[1]}.${p[0]}` : iso; };
+const fDn = n => n==null ? "" : fD(isoOf(n));
+const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const fM = ym => { if (!ym) return ""; const [y,m] = ym.split("-").map(Number); return `${MON[m-1]} ${y}`; };
+const mStart = ym => ym ? dn(ym+"-01") : null;
+const mEnd = ym => { if (!ym) return null; const [y,m] = ym.split("-").map(Number); return Date.UTC(y,m,0)/864e5; };
+const num = v => { if (typeof v === "number") return v; if (typeof v === "string" && /^-?\d+(\.\d+)?$/.test(v.trim())) return Number(v); return NaN; };
+const money = (v,cur) => { if (!isFinite(v) || v===0) return "—"; const s = Math.round(v).toLocaleString("en-US"); return (cur==="EUR"?"€":"$")+s; };
+const mt = v => isFinite(num(v)) ? (Math.round(num(v)*1000)/1000).toLocaleString("en-US") : "";
+const kb = b => b >= 1048576 ? `${(b/1048576).toFixed(1)} MB` : `${Math.max(1,Math.round(b/1024))} KB`;
+const T = () => dn(todayISO());
+const clientKey = name => String(name||"").toLowerCase().replace(/^(m\/s|messrs\.?)\s+/,"").replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,80) || "unknown";
+const uErr = msg => { const e = new Error(msg); e.userMsg = msg; return e; };
+
+const value = d => { const t = num(d.total); if (isFinite(t)) return t; const q = num(d.qty), p = num(d.price); return isFinite(q)&&isFinite(p) ? q*p : 0; };
+const isShipped = d => !!(d.shipped || d.shippedOn || d.bl);
+const isArrived = d => !!(d.arrived || d.arrivedOn);
+const needsDeposit = d => num(d.advPct) > 0 && !d.depositOn;
+const balanceDue = d => { const b = dn(d.balanceDue); if (b!=null) return b; const e = dn(d.eta), k = num(d.balDays); return e!=null && isFinite(k) ? e - k : null; };
+const remindOn = (d,c) => { const e = dn(d.eta), b = balanceDue(d);
+  if (b!=null) return (e!=null && b<=e) ? e - c.remindDays : b - c.dueRemindDays;
+  return e!=null ? e - c.remindDays : null; };
+const filesOf = d => Array.isArray(d.files) ? d.files : [];
+const fileURL = id => S.files ? S.files.url(id) : "";
+const signFor = d => { if (!S.files || !d) return Promise.resolve(); const c = S.clients.get(clientKey(d.client));
+  return S.files.sign([...filesOf(d), ...((c && c.files) || [])].map(f => f.id)); };
+const clientFiles = d => { const c = S.clients.get(clientKey(d.client)); return c && Array.isArray(c.files) ? c.files : []; };
+
+/* ------------------------------------------------------------------ alerts */
+function assess(d) {
+  const c = S.cfg, t = T(), st = d.stage;
+  if (st === "closed") return d.outcome==="paid" ? {level:0,label:"Paid · closed"} : {level:-1,label:d.outcome==="cancelled"?"Cancelled":"Lost"};
+  if (st === "inquiry") {
+    const a = d.inqDate ? t - dn(d.inqDate) : 0;
+    const st2 = d.inqStatus && !/still pending/i.test(d.inqStatus) ? `${d.inqStatus} · ` : "";
+    return a >= c.inquiryDays ? {level:3,label:"Waiting for offer",hint:`${st2}${a} days old`} : {level:0,label:"New inquiry",hint:st2.replace(/ · $/,"")};
+  }
+  if (st === "offer") {
+    if (d.millOrder) return {level:2,label:"Booked. Client signed?",hint:`${d.millOrder} in En Cours for this client`};
+    if (!d.salesman || d.salesman === "To assign") return {level:3,label:"Assign salesman"};
+    const v = dn(d.validUntil);
+    if (v!=null) return v < t ? {level:3,label:"Expired, follow up",hint:`Valid until ${fD(d.validUntil)}`} : {level:0,label:`Valid until ${fD(d.validUntil)}`};
+    const a = d.offerDate ? t - dn(d.offerDate) : 0;
+    return a >= c.followDays ? {level:3,label:"No reply yet, follow up",hint:`Sent ${a} days ago`} : {level:0,label:"Waiting for client"};
+  }
+  if (st === "signed") {
+    const a = d.signedOn ? t - dn(d.signedOn) : 0;
+    return {level: a>=3 ? 1 : 2, label:"Mill PI not signed", hint: d.signedOn ? `Client signed ${a} day${a===1?"":"s"} ago` : ""};
+  }
+  const e = dn(d.eta), sh = isShipped(d), ar = isArrived(d), due = balanceDue(d), rem = remindOn(d,c);
+  const ms = mStart(d.shipMonth), me = mEnd(d.shipMonth);
+  if (d.mayCancel) return {level:2,label:"May cancel. Decide",hint:"Marked 'possible to cancel' in En Cours"};
+  if (needsDeposit(d)) return {level:1,label:"Deposit not paid",hint:`${Math.round(num(d.advPct)*100)}% = ${money(value(d)*num(d.advPct),d.cur)}`};
+  if (due!=null && due < t) return {level:1,label:"Balance overdue",hint:`Was due ${fDn(due)}`};
+  if (!sh && me!=null && t > me) return {level:1,label:"Shipment late",hint:`Offer said ${fM(d.shipMonth)}`};
+  if (!ar && e!=null && e < t) return {level:1,label: sh ? "ETA passed. Confirm arrival" : "ETA passed. Not shipped?",hint:`${t - e} day${t-e===1?"":"s"} ago`};
+  if (ar && (due==null || due <= t)) return {level:1,label:"Arrived. Client not paid"};
+  if (rem!=null && rem <= t) return {level:2,label:"Remind client to pay",hint: due!=null ? `Balance due ${fDn(due)}` : (e!=null ? `Arrives in ${e - t} days` : "")};
+  if (!sh && e!=null && e - t <= c.blWarnDays) return {level:2,label:"No B/L yet, ETA close",hint:`${e - t} days to ETA`};
+  if (!sh && ms!=null && t >= ms) return {level:2,label:"Ship month. Not shipped yet",hint:`Offer said ${fM(d.shipMonth)}`};
+  if (d.kind === "offshore" && !d.millRef) return {level:2,label:"Mill PI no. missing",hint:"Type the PI no. once the mill signs"};
+  return {level:0,label:"On track", hint: rem!=null ? `Remind client on ${fDn(rem)}` : ""};
+}
+
+/* ------------------------------------------------------------------ fields & actions */
+const F = {
+  client:{l:"Client",t:"text",req:1}, contact:{l:"Contact person",t:"text"}, salesman:{l:"Salesman",t:"sales"},
+  kind:{l:"Type",t:"select",o:[["local","Local (Lebanon)"],["offshore","Offshore"]]},
+  inqDate:{l:"Inquiry date",t:"date"}, product:{l:"Product / quality",t:"text",w:1}, spec:{l:"GSM / size",t:"text"},
+  qty:{l:"Qty (MT)",t:"num"}, qtyType:{l:"Qty type",t:"select",o:[["Firm","Firm"],["Min","Minimum"],["Container","Container"]]},
+  dest:{l:"Delivery / port",t:"text"}, port:{l:"Port",t:"text"},
+  ref:{l:"Offer ref / order no.",t:"text",ph:"HIP 26124"}, offerDate:{l:"Offer date",t:"date"},
+  cur:{l:"Currency",t:"select",o:[["USD","USD"],["EUR","EUR"]]}, price:{l:"Price / MT",t:"amt"},
+  total:{l:"Total",t:"num",h:"Leave empty to use qty × price"}, terms:{l:"Payment terms",t:"area",w:1},
+  advPct:{l:"Advance %",t:"pct"}, balDays:{l:"Balance due: days before arrival",t:"num",h:"Empty if paid from invoice, on shipment or after arrival"},
+  shipMonth:{l:"Shipment month",t:"month"}, validUntil:{l:"Valid until",t:"date",h:"Empty = immediate confirmation"},
+  signedOn:{l:"Client signed on",t:"date"}, millOrder:{l:"Mill order no.",t:"text",ph:"H2646 or F2644"},
+  millRef:{l:"Mill PI no.",t:"text"}, piOn:{l:"Mill signed PI on",t:"date"}, supplier:{l:"Mill / supplier",t:"text"},
+  purchase:{l:"Purchase price / MT",t:"amt"}, profit:{l:"Profit",t:"num"},
+  depositOn:{l:"Deposit received on",t:"date"}, shippedOn:{l:"Shipped on",t:"date"}, bl:{l:"B/L no.",t:"text"},
+  eta:{l:"ETA",t:"date"}, arrivedOn:{l:"Arrived on",t:"date"}, balanceDue:{l:"Balance due on",t:"date",h:"Empty = ETA minus the days in the terms"},
+  paidOn:{l:"Paid in full on",t:"date"}, mayCancel:{l:"May cancel (from En Cours)",t:"check"},
+  notes:{l:"Notes",t:"area",w:1}, lostReason:{l:"Why was it lost? (optional)",t:"text",w:1},
+  "file:inquiry":{l:"Attach the inquiry (optional)",t:"file",cat:"inquiry"}, "file:offer":{l:"Attach the offer you sent",t:"file",cat:"offer"},
+  "file:signed":{l:"Attach the signed offer",t:"file",cat:"signed"}, "file:pi":{l:"Attach the signed mill PI",t:"file",cat:"pi"},
+  "file:deposit":{l:"Attach the deposit proof",t:"file",cat:"deposit"}, "file:shipping":{l:"Attach the B/L or shipping docs",t:"file",cat:"shipping"},
+  "file:payment":{l:"Attach the payment proof",t:"file",cat:"payment"}
+};
+const today = () => todayISO();
+const ACTIONS = {
+  makeOffer:{title:"Make it an offer", sub:"Fill in what you sent the client. It moves to Pending offers.", ok:"Move to offers",
+    fields:["ref","offerDate","salesman","product","spec","qty","qtyType","cur","price","total","terms","advPct","balDays","shipMonth","validUntil","file:offer"],
+    defs:d=>({ref:d.ref||"HIP ",offerDate:today(),cur:d.cur||"USD",qtyType:d.qtyType||"Firm"}), req:["ref","price"],
+    apply:v=>({...v,stage:"offer"}), done:d=>`${d.ref||d.client} moved to Pending offers`},
+  signed:{title:"Client signed the offer", sub:"It moves to Signed offers, waiting for the mill.", ok:"Mark signed",
+    fields:["signedOn","salesman","file:signed"], defs:()=>({signedOn:today()}), apply:v=>({...v,stage:"signed"}), done:d=>`${d.ref} signed`},
+  mill:{title:"Mill confirmed the order", sub:"Mill signed our PI. It becomes an order.", ok:"Make it an order",
+    fields:["millOrder","millRef","piOn","eta","shipMonth","file:pi"], defs:()=>({piOn:today()}), req:["millOrder"],
+    apply:v=>({...v,stage:"order"}), done:d=>`${d.ref} is now an order`},
+  deposit:{title:"Deposit received", ok:"Save", fields:["depositOn","file:deposit"], defs:()=>({depositOn:today()}), apply:v=>v, done:d=>`Deposit saved for ${d.ref}`},
+  shipped:{title:"Goods shipped", ok:"Save", fields:["shippedOn","bl","eta","file:shipping"], defs:()=>({shippedOn:today()}), apply:v=>({...v,shipped:true}), done:d=>`${d.ref} shipped`},
+  arrived:{title:"Goods arrived", ok:"Save", fields:["arrivedOn"], defs:()=>({arrivedOn:today()}), apply:v=>({...v,arrived:true}), done:d=>`${d.ref} arrived`},
+  paid:{title:"Client paid in full", sub:"The deal moves to Closed.", ok:"Close deal", fields:["paidOn","file:payment"], defs:()=>({paidOn:today()}),
+    apply:(v,d)=>({...v,stage:"closed",outcome:"paid",prevStage:d.stage}), done:d=>`${d.ref} paid and closed`},
+  lost:{title:"Mark as lost", sub:"The deal moves to Closed. You can reopen it later.", ok:"Mark lost", fields:["lostReason"],
+    apply:(v,d)=>({...v,stage:"closed",outcome:"lost",closedOn:today(),prevStage:d.stage}), done:d=>`${d.ref||d.client} marked lost`}
+};
+const NEW = {
+  inquiry:{title:"New inquiry", sub:"A request from a salesman. Make it an offer when you send prices.",
+    fields:["inqDate","salesman","client","contact","product","spec","qty","dest","notes","file:inquiry"], defs:()=>({inqDate:today()}), req:["client"],
+    make:v=>({...v,stage:"inquiry",kind:"local"})},
+  offer:{title:"New offer", sub:"An offer sent without an inquiry row.",
+    fields:["ref","offerDate","client","contact","salesman","product","spec","qty","qtyType","cur","price","total","terms","advPct","balDays","shipMonth","validUntil","notes","file:offer"],
+    defs:()=>({ref:"HIP ",offerDate:today(),cur:"USD",qtyType:"Firm"}), req:["ref","client","price"], make:v=>({...v,stage:"offer",kind:"local"})},
+  order:{title:"New order", sub:"An order already confirmed by the mill, e.g. an offshore deal.",
+    fields:["ref","kind","client","port","supplier","product","qty","cur","purchase","price","total","profit","advPct","balDays","millRef","eta","shipMonth","notes","file:pi"],
+    defs:()=>({kind:"offshore",cur:"USD"}), req:["ref","client"], make:v=>({...v,stage:"order",millOrder:v.millOrder||v.ref})}
+};
+const EDIT_GROUPS = [
+  ["Deal",["client","contact","salesman","kind","product","spec","qty","qtyType","dest","inqDate"]],
+  ["Offer",["ref","offerDate","cur","price","total","terms","advPct","balDays","shipMonth","validUntil","signedOn"]],
+  ["Mill & order",["millOrder","millRef","piOn","supplier","purchase","profit","port","mayCancel"]],
+  ["Payments & shipment",["depositOn","shippedOn","bl","eta","arrivedOn","balanceDue","paidOn"]],
+  ["Notes",["notes"]]
+];
+
+/* ------------------------------------------------------------------ files */
+async function toJpeg(file, max = 2400) {
+  let bmp;
+  try { bmp = await createImageBitmap(file); } catch (e) { throw uErr(`${file.name}: this photo format can't be read here. Take a screenshot of it, or save it as JPG or PDF.`); }
+  const k = Math.min(1, max / Math.max(bmp.width, bmp.height)), c = document.createElement("canvas");
+  c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+  const blob = await new Promise(r => c.toBlob(r, "image/jpeg", 0.85));
+  if (!blob) throw uErr(`${file.name}: couldn't convert this photo.`);
+  return blob;
+}
+async function prepare(file) {
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  let type = OK_TYPES.includes(file.type) ? file.type : EXT_TYPE[ext];
+  const base = file.name.replace(/\.[^.]+$/, "") || "file";
+  if (!type && (String(file.type).startsWith("image/") || /^(heic|heif|bmp|tif|tiff|avif)$/.test(ext)))
+    return {blob: await toJpeg(file), type:"image/jpeg", name:`${base}.jpg`};
+  if (!type) throw uErr(`${file.name}: Word, Excel and similar files can't be attached. Save it as PDF first.`);
+  if ((type === "image/jpeg" || type === "image/png" || type === "image/webp") && file.size > 8 * 1024 * 1024)
+    return {blob: await toJpeg(file), type:"image/jpeg", name:`${base}.jpg`};
+  if (file.size > MAXB) throw uErr(`${file.name} is ${kb(file.size)}. The limit is 20 MB per file.`);
+  return {blob:file, type, name: /\.[a-z0-9]{2,4}$/i.test(file.name) ? file.name : `${file.name}.${TYPE_EXT[type]}`};
+}
+async function uploadFiles(files, cat) {
+  if (!S.assets) throw uErr("Attachments can only be added by someone who can edit this page.");
+  const out = [];
+  for (const f of files) {
+    const p = await prepare(f);
+    let r;
+    try { r = await S.assets.upload(p.blob, {type: p.type}); }
+    catch (e) {
+      const why = {too_large:"is over 20 MB", unsupported_type:"is a file type that can't be attached (use PDF or a photo)", quota_or_state:"couldn't be stored: the page's file storage is full",
+        rate_limited:"wasn't saved because too many files were sent at once. Try again in a minute", upstream_auth:"wasn't saved. Reload the page and sign in again"}[e && e.code] || "wasn't saved. Try again";
+      throw uErr(`${p.name} ${why}.`);
+    }
+    out.push({id:r.id, name:p.name, cat, type:r.contentType || p.type, size:r.sizeBytes || p.blob.size, at:todayISO()});
+  }
+  return out;
+}
+async function saveFile(f) {
+  if (!S.downloads) { toast("Use Open instead: saving isn't available in this view."); return; }
+  try {
+    const blob = await S.files.download(f.id);
+    const name = /\.[a-z0-9]{2,4}$/i.test(f.name) ? f.name : `${f.name}.${TYPE_EXT[f.type] || "pdf"}`;
+    await S.downloads.save({filename:name, data:blob});
+  } catch (e) { if (!e || e.code !== "declined") toast(`Couldn't save ${f.name}.`); }
+}
+
+/* ------------------------------------------------------------------ rendering */
+function visible(d) {
+  if (S.fs && (d.salesman||"") !== S.fs) return false;
+  if (S.fl) {
+    const a = d._a;
+    if (S.fl === "arr") { if (!(d.stage==="order" && !isArrived(d) && dn(d.eta)!=null && dn(d.eta) - T() <= 30)) return false; }
+    else if (String(a.level) !== S.fl) return false;
+  }
+  if (S.q) {
+    const hay = [d.ref,d.client,d.contact,d.product,d.spec,d.millOrder,d.millRef,d.bl,d.salesman,d.notes,d.port,d.supplier,...filesOf(d).map(f=>f.name)].join(" ").toLowerCase();
+    if (!S.q.split(/\s+/).every(w => hay.includes(w))) return false;
+  }
+  return true;
+}
+function sortKey(d) {
+  const p = d._a.level > 0 ? d._a.level : 9;
+  const second = d.stage==="order" ? (dn(d.eta) ?? 99999) : d.stage==="closed" ? -(dn(d.paidOn||d.closedOn) ?? 0) : 0;
+  return [p, second, String(d.ref||d.client||"")];
+}
+const cmp = (a,b) => { const x = sortKey(a), y = sortKey(b); for (let i=0;i<x.length;i++){ if (x[i]<y[i]) return -1; if (x[i]>y[i]) return 1; } return 0; };
+
+function infoHTML(d) {
+  const L = [];
+  if (d.stage === "inquiry") {
+    L.push(`<span class="ln">Asked <b>${esc(fD(d.inqDate))}</b>${d.dest?` · ${esc(d.dest)}`:""}</span>`);
+    if (d.spec) L.push(`<span class="ln">${esc(d.spec)}</span>`);
+  } else if (d.stage === "offer") {
+    L.push(`<span class="ln">Sent <b>${esc(fD(d.offerDate))}</b>${d.shipMonth?` · ship <b>${esc(fM(d.shipMonth))}</b>`:""}</span>`);
+    if (d.terms) L.push(`<span class="ln" title="${esc(d.terms)}">${esc(d.terms)}</span>`);
+  } else if (d.stage === "signed") {
+    L.push(`<span class="ln">Signed <b>${esc(fD(d.signedOn))}</b>${d.shipMonth?` · ship <b>${esc(fM(d.shipMonth))}</b>`:""}</span>`);
+    if (d.terms) L.push(`<span class="ln" title="${esc(d.terms)}">${esc(d.terms)}</span>`);
+  } else if (d.stage === "closed" && d.outcome !== "paid") {
+    L.push(`<span class="ln">${d.outcome==="cancelled"?"Cancelled":"Lost"}${d.closedOn?` <b>${esc(fD(d.closedOn))}</b>`:""}${d.lostReason?` · ${esc(d.lostReason)}`:""}</span>`);
+  } else if (d.stage === "order" || d.stage === "closed") {
+    const eta = d.eta ? `ETA <b>${esc(fD(d.eta))}</b>` : (d.etaNote ? esc(d.etaNote) : "No ETA yet");
+    L.push(`<span class="ln">${eta}${d.millOrder?` · <span class="mono">${esc(d.millOrder)}</span>`:""}${d.port?` · ${esc(d.port)}`:""}</span>`);
+    L.push(`<span class="steps">${stepsHTML(d)}</span>`);
+  }
+  return L.join("");
+}
+function stepsHTML(d) {
+  const can = S.canWrite && d.stage === "order";
+  const step = (label, done, when, act) => done
+    ? `<span class="st done">✓ ${esc(label)}${when?` ${esc(fD(when).slice(0,5))}`:""}</span>`
+    : (can ? `<button type="button" class="st" data-act="${act}" data-id="${esc(d._id)}">${esc(label)}?</button>` : `<span class="st">${esc(label)}?</span>`);
+  const out = [];
+  if (num(d.advPct) > 0 || d.depositOn) out.push(step("Deposit", !!d.depositOn, d.depositOn, "deposit"));
+  out.push(step("Shipped", isShipped(d), d.shippedOn, "shipped"));
+  out.push(step("Arrived", isArrived(d), d.arrivedOn, "arrived"));
+  out.push(step("Paid", !!d.paidOn, d.paidOn, "paid"));
+  return out.join("");
+}
+function actHTML(d) {
+  if (!S.canWrite) return "";
+  const id = esc(d._id), b = (act, txt, cls="") => `<button type="button" class="btn sm ${cls}" data-act="${act}" data-id="${id}">${txt}</button>`;
+  switch (d.stage) {
+    case "inquiry": return b("makeOffer","Make offer →","primary") + b("lost","Lost","ghost");
+    case "offer":   return b("signed","Client signed →","primary") + b("lost","Lost","ghost");
+    case "signed":  return b("mill","Mill confirmed →","primary") + (needsDeposit(d) ? b("deposit","Deposit paid") : "") + b("lost","Cancel","ghost");
+    case "order": {
+      const next = needsDeposit(d) ? ["deposit","Deposit paid"] : !isShipped(d) ? ["shipped","Shipped →"] : !isArrived(d) ? ["arrived","Arrived →"] : ["paid","Paid in full →"];
+      return b(next[0], next[1], "primary");
+    }
+    case "closed": return b("reopen","Reopen","ghost");
+  }
+  return "";
+}
+function valHTML(d) {
+  const v = value(d), q = num(d.qty);
+  const sub = isFinite(q) ? `${mt(q)} MT${d.qtyType==="Min"?" min":d.qtyType==="Container"?" ~":""}` : "";
+  const price = d.price!=null && d.price!=="" ? ` @ ${esc(d.price)}` : "";
+  return `<b>${money(v,d.cur)}</b><span>${esc(sub)}${price}</span>`;
+}
+function rowHTML(d) {
+  const a = d._a, lv = d.stage === "closed" ? "closed" : `l${Math.max(a.level,0)}`;
+  const chipCls = a.level > 0 ? `l${a.level}` : a.level === 0 ? "l0" : "lx";
+  const who = d.salesman && d.salesman !== "To assign" ? esc(d.salesman) : "";
+  const nf = filesOf(d).length;
+  return `<article class="deal ${lv}" data-open="${esc(d._id)}">
+    <button type="button" class="d-open" data-open="${esc(d._id)}">
+      <span class="d-top"><span class="d-ref">${esc(d.ref || "Inquiry")}</span>${d.kind==="offshore"?`<span class="tag off">Offshore</span>`:""}${d.inqNo?`<span class="tag">Inq #${esc(d.inqNo)}</span>`:""}${nf?`<span class="clip" title="${nf} attachment${nf===1?"":"s"}">${CLIP}${nf}</span>`:""}</span>
+      <span class="d-client">${esc(d.client)}</span>
+      <span class="d-prod">${esc(d.product || "")}</span>
+    </button>
+    <div class="d-who ${who?"":"none"}">${who || (d.kind==="offshore" ? "" : "No salesman")}</div>
+    <div class="d-val">${valHTML(d)}</div>
+    <div class="d-info">${infoHTML(d)}</div>
+    <div class="d-alert"><span class="chip ${chipCls}">${esc(a.label)}</span>${a.hint?`<small>${esc(a.hint)}</small>`:""}</div>
+    <div class="d-act">${actHTML(d)}</div>
+  </article>`;
+}
+function totalsText(list) {
+  const usd = list.filter(d=>d.cur!=="EUR").reduce((s,d)=>s+value(d),0), eur = list.filter(d=>d.cur==="EUR").reduce((s,d)=>s+value(d),0);
+  return [usd?money(usd,"USD"):"", eur?money(eur,"EUR"):""].filter(Boolean).join(" + ") || "—";
+}
+
+function render() {
+  const all = [...S.deals.values()];
+  all.forEach(d => d._a = assess(d));
+  const open = all.filter(d => d.stage !== "closed");
+  $("#pipe").innerHTML = STAGES.map(s => {
+    const list = all.filter(d => d.stage === s.key);
+    const val = s.key === "closed" ? `${list.filter(d=>d.outcome==="paid").length} paid · ${list.filter(d=>d.outcome!=="paid").length} lost` : totalsText(list);
+    return `<button type="button" data-jump="${s.key}"><span class="k">${esc(s.short)}</span><span class="n num">${list.length}</span><span class="v">${esc(val)}</span></button>`;
+  }).join("");
+  const cnt = l => open.filter(d => d._a.level === l).length;
+  const arr = open.filter(d => d.stage==="order" && !isArrived(d) && dn(d.eta)!=null && dn(d.eta) - T() <= 30).length;
+  const chip = (key, dot, label, n) => `<button type="button" class="fchip" data-f="${key}" aria-pressed="${S.fl===key}"><span class="dot ${dot}"></span>${label} <b>${n}</b></button>`;
+  $("#attn").innerHTML = `<span class="lbl">Needs attention</span>` + chip("1","l1","Urgent",cnt(1)) + chip("2","l2","This week",cnt(2)) +
+    chip("3","l3","Sales follow-up",cnt(3)) + chip("arr","l4","Arriving in 30 days",arr) +
+    (S.fl ? `<button type="button" class="btn ghost sm" data-f="">Show all</button>` : "");
+  const sel = $("#fs"), cur = sel.value, names = [...new Set([...S.cfg.salesmen, ...all.map(d=>d.salesman).filter(Boolean)])];
+  sel.innerHTML = `<option value="">All salesmen</option>` + names.map(n => `<option ${n===cur?"selected":""}>${esc(n)}</option>`).join("");
+  $("#bands").innerHTML = STAGES.map((s, i) => {
+    if (s.key === "closed" && !S.showClosed) return "";
+    const inStage = all.filter(d => d.stage === s.key);
+    const list = inStage.filter(visible).sort(cmp);
+    const collapsed = !!S.collapsed[s.key];
+    const lim = S.limit[s.key] || 80;
+    const add = S.canWrite && s.add ? `<button type="button" class="btn sm" data-new="${s.key}">+ ${esc(s.add)}</button>` : "";
+    const filtered = list.length !== inStage.length ? ` · showing ${list.length}` : "";
+    let body = "";
+    if (!collapsed) {
+      if (!inStage.length) body = `<div class="empty"><span>${esc(emptyText(s.key))}</span>${add}</div>`;
+      else if (!list.length) body = `<div class="empty"><span>No deals here match the filter.</span></div>`;
+      else body = `<div class="list">${list.slice(0, lim).map(rowHTML).join("")}</div>` +
+        (list.length > lim ? `<div class="more"><button type="button" class="btn" data-more="${s.key}">Show ${list.length - lim} more</button></div>` : "");
+    }
+    return `<section class="band" id="b-${s.key}" data-stage="${s.key}">
+      <div class="band-h"><h2><span class="step">${i<4?`0${i+1}`:"—"}</span>${esc(s.title)}</h2>
+        <span class="meta">${inStage.length ? `${inStage.length} · ${esc(totalsText(inStage))}${filtered} · ` : ""}${esc(s.sub)}</span>
+        <span class="sp"></span>${inStage.length?add:""}
+        <button type="button" class="tog" data-tog="${s.key}" aria-expanded="${!collapsed}">${collapsed?"Show":"Hide"}</button></div>
+      ${body}</section>`;
+  }).join("");
+}
+function emptyText(k) {
+  return {inquiry:"No pending inquiries. Add one when a salesman sends a price request.", offer:"No pending offers.", signed:"No signed offers waiting for the mill.",
+    order:"No open orders.", closed:"Nothing closed yet."}[k];
+}
+
+/* ------------------------------------------------------------------ deal page: progress, documents, details */
+function fileItem(f, scope, ownerId) {
+  const isImg = String(f.type).startsWith("image/");
+  const th = isImg && fileURL(f.id) ? `<img src="${esc(fileURL(f.id))}" alt="" loading="lazy">` : esc((TYPE_EXT[f.type] || (f.name.split(".").pop()||"file")).toUpperCase().slice(0,4));
+  return `<div class="att-i"><span class="th">${th}</span>
+    <span class="nm"><a href="${esc(fileURL(f.id) || "#")}" target="_blank" rel="noopener" data-flink="${esc(f.id)}">${esc(f.name)}</a><span>${esc(fD(f.at))}${f.size?` · ${esc(kb(f.size))}`:""}</span></span>
+    ${S.downloads ? `<button type="button" class="x" data-fsave="${esc(f.id)}" data-scope="${scope}" data-owner="${esc(ownerId)}" title="Save to your device">Save</button>` : ""}
+    ${S.assets ? `<button type="button" class="x" data-fdel="${esc(f.id)}" data-scope="${scope}" data-owner="${esc(ownerId)}" title="Remove attachment">Remove</button>` : ""}</div>`;
+}
+const attachBtn = (scope, owner, cat, label = "+ Attach") => S.assets
+  ? `<label class="att-add">${label}<input type="file" multiple accept="${ACCEPT}" data-up="${scope}" data-owner="${esc(owner)}" data-cat="${cat}"></label>` : "";
+const busyLine = (scope, owner, cat) => { const b = S.busy[`${scope}:${owner}:${cat}`]; return b ? `<span class="att-busy">Uploading ${esc(b)}…</span>` : ""; };
+function groupHTML(title, files, scope, ownerId, cat) {
+  return `<div class="att-g ${files.length?"has":""}"><div class="att-h"><b>${esc(title)}</b>${files.length?`<span class="cnt">${files.length}</span>`:""}<span style="flex:1"></span>${attachBtn(scope, ownerId, cat, "+ Add")}</div>
+    ${files.map(f => fileItem(f, scope, ownerId)).join("") || (S.busy[`${scope}:${ownerId}:${cat}`] ? "" : `<span class="att-empty">Nothing attached</span>`)}
+    ${busyLine(scope, ownerId, cat)}</div>`;
+}
+const STEPS = [
+  {k:"inquiry", t:"Inquiry received", cat:"inquiry"},
+  {k:"offer",   t:"Offer sent", cat:"offer", act:"makeOffer", when:["inquiry"], btn:"Make offer →"},
+  {k:"signed",  t:"Client signed the offer", cat:"signed", act:"signed", when:["offer"], btn:"Client signed →"},
+  {k:"pi",      t:"Mill confirmed · PI signed", cat:"pi", act:"mill", when:["signed"], btn:"Mill confirmed →"},
+  {k:"deposit", t:"Deposit received", cat:"deposit", act:"deposit", when:["signed","order"], btn:"Deposit paid"},
+  {k:"shipped", t:"Shipped", cat:"shipping", act:"shipped", when:["order"], btn:"Mark shipped"},
+  {k:"arrived", t:"Arrived", cat:null, act:"arrived", when:["order"], btn:"Mark arrived"},
+  {k:"paid",    t:"Paid in full", cat:"payment", act:"paid", when:["order"], btn:"Paid in full"}
+];
+const SIDX = {inquiry:0, offer:1, signed:2, order:3, closed:4};
+const ATT_LBL = {inquiry:"inquiry", offer:"offer", signed:"signed offer", pi:"mill PI", deposit:"deposit proof", shipping:"B/L", payment:"payment proof"};
+function stepInfo(d, k) {
+  const eff = SIDX[d.stage === "closed" ? (d.prevStage || (d.outcome === "paid" ? "order" : (d.ref ? "offer" : "inquiry"))) : d.stage] ?? 0;
+  const has = cat => filesOf(d).some(f => f.cat === cat);
+  const v = value(d), adv = num(d.advPct);
+  switch (k) {
+    case "inquiry": return {show: !!(d.inqDate || d.inqNo || d.stage === "inquiry" || has("inquiry")), done:true, date:d.inqDate,
+      meta:[d.inqNo ? `Inquiry #${d.inqNo}` : "", d.spec, d.dest].filter(Boolean).join(" · ")};
+    case "offer": return {show:true, done: !!d.offerDate || eff >= 1, date:d.offerDate,
+      meta:[d.ref, d.validUntil ? `valid until ${fD(d.validUntil)}` : "", d.terms].filter(Boolean).join(" · ")};
+    case "signed": return {show:true, done: !!d.signedOn || eff >= 2, date:d.signedOn, meta:""};
+    case "pi": return {show:true, done: !!(d.piOn || d.millRef) || eff >= 3, date:d.piOn,
+      meta:[d.millOrder ? `Order ${d.millOrder}` : "", d.millRef ? `PI ${d.millRef}` : "", d.supplier].filter(Boolean).join(" · ")};
+    case "deposit": return {show: adv > 0 || !!d.depositOn || has("deposit"), done: !!d.depositOn, date:d.depositOn,
+      meta: adv > 0 ? `${Math.round(adv*100)}% = ${money(v*adv, d.cur)}` : ""};
+    case "shipped": return {show:true, done: isShipped(d), date:d.shippedOn,
+      meta:[d.bl ? `B/L ${d.bl}` : "", d.eta ? `ETA ${fD(d.eta)}` : "", d.etaNote].filter(Boolean).join(" · ")};
+    case "arrived": return {show:true, done: isArrived(d), date:d.arrivedOn, meta: !isArrived(d) && d.eta ? `Expected ${fD(d.eta)}` : ""};
+    case "paid": { const due = balanceDue(d), rem = remindOn(d, S.cfg);
+      return {show:true, done: !!d.paidOn, date:d.paidOn,
+        meta: d.paidOn ? "" : [adv > 0 ? `Balance ${money(v*(1-adv), d.cur)}` : (v ? `Total ${money(v, d.cur)}` : ""), due != null ? `due ${fDn(due)}` : "", rem != null ? `remind client ${fDn(rem)}` : ""].filter(Boolean).join(" · ")}; }
+  }
+}
+function timelineHTML(d) {
+  let nextFound = false;
+  return `<ol class="tl">` + STEPS.map(s => {
+    const i = stepInfo(d, s.k); if (!i.show) return "";
+    let cls = i.done ? "done" : "todo";
+    if (!i.done && !nextFound && d.stage !== "closed") { cls = "next"; nextFound = true; }
+    const when = i.done ? (i.date ? fD(i.date) : "Done") : (cls === "next" ? "Next step" : "Not yet");
+    const files = s.cat ? filesOf(d).filter(f => f.cat === s.cat) : [];
+    const canAct = S.canWrite && cls === "next" && s.act && s.when.includes(d.stage);
+    return `<li class="tl-s ${cls}"><span class="tl-dot">${i.done ? "✓" : ""}</span>
+      <div class="tl-c"><div class="tl-t"><b>${esc(s.t)}</b><span>${esc(when)}</span></div>
+        ${i.meta ? `<div class="tl-meta">${esc(i.meta)}</div>` : ""}
+        ${files.length || (s.cat && S.busy[`deal:${d._id}:${s.cat}`]) ? `<div class="tl-files">${files.map(f => fileItem(f, "deal", d._id)).join("")}${s.cat ? busyLine("deal", d._id, s.cat) : ""}</div>` : ""}</div>
+      <div class="tl-a">${s.cat ? attachBtn("deal", d._id, s.cat, `+ Attach ${ATT_LBL[s.cat]}`) : ""}${canAct ? `<button type="button" class="btn sm primary" data-act="${s.act}" data-id="${esc(d._id)}" data-from="view">${esc(s.btn)}</button>` : ""}</div></li>`;
+  }).join("") + `</ol>`;
+}
+function kvCard(title, rows) {
+  const body = rows.filter(([, v]) => v !== null && v !== undefined && v !== "" && v !== "—").map(([l, v]) => `<div class="kv"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join("");
+  return body ? `<div class="kv-card"><h5>${esc(title)}</h5>${body}</div>` : "";
+}
+function viewHTML(d) {
+  const a = assess(d), v = value(d), adv = num(d.advPct), due = balanceDue(d), rem = remindOn(d, S.cfg);
+  const chipCls = a.level > 0 ? `l${a.level}` : a.level === 0 ? "l0" : "lx";
+  const stageT = (STAGES.find(s => s.key === d.stage) || {}).title || d.stage;
+  const quick = !S.canWrite ? "" : d.stage === "closed" ? `<button type="button" class="btn sm ghost" data-act="reopen" data-id="${esc(d._id)}" data-from="view">Reopen</button>`
+    : `<button type="button" class="btn sm ghost" data-act="lost" data-id="${esc(d._id)}" data-from="view">${d.stage === "order" || d.stage === "signed" ? "Cancel deal" : "Mark lost"}</button>`;
+  const margin = isFinite(num(d.profit)) && v ? `${(num(d.profit) / v * 100).toFixed(1)}%` : "";
+  const qty = isFinite(num(d.qty)) ? `${mt(d.qty)} MT${d.qtyType === "Min" ? " (minimum)" : d.qtyType === "Container" ? " (approx.)" : ""}` : "";
+  const ck = clientKey(d.client), cf = clientFiles(d), df = filesOf(d);
+  const other = df.filter(f => !["inquiry","offer","signed","pi","deposit","shipping","payment"].includes(f.cat));
+  return `<div class="view">
+    <div class="v-top">
+      <div class="st-big"><span class="chip ${chipCls}">${esc(a.label)}</span>${a.hint ? `<small>${esc(a.hint)}</small>` : ""}<small>Stage: ${esc(stageT)}</small></div>
+      <div class="money"><div><span>Value</span><b>${money(v, d.cur)}</b></div>${adv > 0 ? `<div><span>Advance ${Math.round(adv*100)}%</span><b>${money(v*adv, d.cur)}</b></div>` : ""}${isFinite(num(d.profit)) ? `<div><span>Profit</span><b>${money(num(d.profit), d.cur)}</b></div>` : ""}</div>
+      <div class="qa">${quick}</div>
+    </div>
+    <h4 class="v-h">Progress and documents</h4>
+    ${timelineHTML(d)}
+    <h4 class="v-h">Client and other documents</h4>
+    <div class="att">
+      ${groupHTML(`Client documents · shared by all ${d.client} deals`, cf, "client", ck, "client")}
+      ${groupHTML("Invoice", df.filter(f => f.cat === "invoice"), "deal", d._id, "invoice")}
+      ${groupHTML("Other", other.filter(f => f.cat !== "invoice"), "deal", d._id, "other")}
+    </div>
+    ${S.assets ? `<p class="note" style="margin:0">PDF or photos, up to 20 MB each. Save Word or Excel files as PDF first.</p>` : ""}
+    <h4 class="v-h">Details</h4>
+    <div class="kvs">
+      ${kvCard("Client", [["Client", d.client], ["Contact", d.contact], ["Salesman", d.kind === "offshore" ? (d.salesman || "Offshore desk") : d.salesman], ["Type", d.kind === "offshore" ? "Offshore" : "Local (Lebanon)"], ["Delivery / port", d.dest || d.port]])}
+      ${kvCard("Product", [["Product", d.product], ["GSM / size", d.spec], ["Quantity", qty], ["Price / MT", d.price != null && d.price !== "" ? `${d.cur === "EUR" ? "€" : "$"}${d.price}` : ""], ["Value", money(v, d.cur)], ["Purchase / MT", d.purchase != null ? `${d.cur === "EUR" ? "€" : "$"}${d.purchase}` : ""], ["Profit", isFinite(num(d.profit)) ? `${money(num(d.profit), d.cur)} (${margin})` : ""]])}
+      ${kvCard("Offer and terms", [["Offer ref", d.ref], ["Offer date", fD(d.offerDate)], ["Valid until", d.validUntil ? fD(d.validUntil) : (d.stage === "offer" ? "Immediate confirmation" : "")], ["Payment terms", d.terms], ["Advance", adv > 0 ? `${Math.round(adv*100)}% = ${money(v*adv, d.cur)}` : ""], ["Shipment month", fM(d.shipMonth)]])}
+      ${kvCard("Mill and shipping", [["Mill order", d.millOrder], ["Mill PI no.", d.millRef], ["PI signed on", fD(d.piOn)], ["Mill / supplier", d.supplier], ["B/L", d.bl], ["ETA", d.eta ? fD(d.eta) : d.etaNote], ["Shipped on", fD(d.shippedOn)], ["Arrived on", fD(d.arrivedOn)]])}
+      ${kvCard("Payments", [["Deposit received", fD(d.depositOn)], ["Balance", adv > 0 ? money(v*(1-adv), d.cur) : ""], ["Balance due", due != null ? fDn(due) : ""], ["Remind client on", !d.paidOn && rem != null ? fDn(rem) : ""], ["Paid in full", fD(d.paidOn)]])}
+    </div>
+    ${d.notes ? `<h4 class="v-h">Notes</h4><p class="v-notes">${esc(d.notes)}</p>` : ""}
+  </div>`;
+}
+function showView(id) {
+  if (id) S.openId = id;
+  const d = S.deals.get(S.openId); if (!d) { closeModal(); return; }
+  signFor(d).then(() => showViewNow(d));
+}
+function showViewNow(d) {
+  openModal({ title: d.client, sub: [d.ref, d.product].filter(Boolean).join(" · "), ok: "Edit details", hideOk: !S.canWrite, cancel: "Close", wide: true,
+    html: viewHTML(d), dealId: d._id, mode: "view", focus: false, onSubmit: async () => openEdit(d._id) });
+}
+function refreshOpen() {
+  if (!S.openId || S.openMode !== "view" || $("#scrim").hidden) return;
+  const d = S.deals.get(S.openId); if (!d) return;
+  signFor(d).then(() => refreshNow(d));
+}
+function refreshNow(d) {
+  if (!S.openId || S.openMode !== "view" || $("#scrim").hidden || S.openId !== d._id) return;
+  const sc = $("#scrim").scrollTop;
+  $("#m-title").textContent = d.client; $("#m-sub").textContent = [d.ref, d.product].filter(Boolean).join(" · ");
+  $("#m-body").innerHTML = viewHTML(d); $("#scrim").scrollTop = sc;
+}
+async function addFiles(scope, owner, cat, files) {
+  const key = `${scope}:${owner}:${cat}`;
+  S.busy[key] = files.length === 1 ? files[0].name : `${files.length} files`; refreshOpen();
+  try {
+    const meta = await uploadFiles(files, cat);
+    if (scope === "deal") {
+      const d = S.deals.get(owner); if (!d) return;
+      await patch(owner, {files: [...filesOf(d), ...meta]});
+    } else {
+      const docRef = S.db.doc(`clients/${owner}`), cur = S.clients.get(owner);
+      const d = S.openId ? S.deals.get(S.openId) : null;
+      await queued(`c:${owner}`, () => cur ? docRef.update({files:[...(cur.files||[]), ...meta], updatedAt:Date.now()})
+                                            : docRef.set({name: d ? d.client : owner, files: meta, updatedAt:Date.now()}));
+    }
+    toast(`${meta.length === 1 ? meta[0].name : meta.length + " files"} attached`);
+  } catch (e) { toast(e.userMsg || `Couldn't attach: ${e.message || "try again"}`); }
+  finally { delete S.busy[key]; refreshOpen(); }
+}
+async function removeFile(scope, owner, id) {
+  try {
+    if (scope === "deal") { const d = S.deals.get(owner); if (!d) return; await patch(owner, {files: filesOf(d).filter(f => f.id !== id)}); }
+    else { const c = S.clients.get(owner); if (!c) return; await queued(`c:${owner}`, () => S.db.doc(`clients/${owner}`).update({files:(c.files||[]).filter(f => f.id !== id), updatedAt:Date.now()})); }
+    try { await S.assets.delete(id); } catch (e) { /* the row no longer points at it */ }
+    toast("Attachment removed");
+  } catch (e) { writeFail(e); }
+}
+function findFile(scope, owner, id) {
+  const list = scope === "deal" ? filesOf(S.deals.get(owner) || {}) : ((S.clients.get(owner) || {}).files || []);
+  return list.find(f => f.id === id);
+}
+
+/* ------------------------------------------------------------------ modal & forms */
+let MODAL = null;
+function monthOptions(sel) {
+  const d = new Date(), out = [`<option value="">—</option>`];
+  for (let i = -6; i <= 15; i++) { const x = new Date(d.getFullYear(), d.getMonth()+i, 1); const v = `${x.getFullYear()}-${pad(x.getMonth()+1)}`;
+    out.push(`<option value="${v}" ${v===sel?"selected":""}>${MON[x.getMonth()]} ${x.getFullYear()}</option>`); }
+  if (sel && !out.some(o => o.includes(`"${sel}"`))) out.push(`<option value="${esc(sel)}" selected>${esc(fM(sel))}</option>`);
+  return out.join("");
+}
+function fieldHTML(k, v) {
+  const f = F[k], id = `f-${k.replace(":","-")}`, wide = f.w || f.t === "area" ? " wide" : "";
+  const lab = `<label for="${id}">${esc(f.l)}${f.req?" *":""}</label>`, hint = f.h ? `<span class="hint">${esc(f.h)}</span>` : "";
+  let inp;
+  switch (f.t) {
+    case "file":
+      if (!S.assets) return "";
+      return `<div class="fld wide"><span class="pick"><span class="row"><label class="btn sm" for="${id}">${CLIP.replace('aria-hidden="true"','aria-hidden="true" width="13" height="13"')} ${esc(f.l)}</label>
+        <input type="file" id="${id}" multiple accept="${ACCEPT}" data-pick="${esc(f.cat)}"><span class="chosen" id="${id}-n"></span></span>
+        <span class="hint">PDF or photo, up to 20 MB. Optional: you can also add it later from the deal.</span></span></div>`;
+    case "date": inp = `<input type="date" id="${id}" value="${esc(v||"")}">`; break;
+    case "num": inp = `<input type="number" step="any" inputmode="decimal" id="${id}" value="${v==null?"":esc(v)}">`; break;
+    case "amt": inp = `<input type="text" inputmode="decimal" id="${id}" value="${v==null?"":esc(v)}">`; break;
+    case "pct": inp = `<input type="number" step="any" min="0" max="100" inputmode="decimal" id="${id}" value="${v==null||v===""?"":esc(Math.round(num(v)*1000)/10)}" placeholder="e.g. 20">`; break;
+    case "area": inp = `<textarea id="${id}">${esc(v||"")}</textarea>`; break;
+    case "month": inp = `<select id="${id}">${monthOptions(v)}</select>`; break;
+    case "select": inp = `<select id="${id}">${v == null || v === "" ? `<option value="" selected>—</option>` : ""}${f.o.map(([val,txt]) => `<option value="${esc(val)}" ${val===v?"selected":""}>${esc(txt)}</option>`).join("")}</select>`; break;
+    case "sales": { const names = [...new Set([...S.cfg.salesmen, v].filter(x => x && x !== "To assign"))];
+      inp = `<select id="${id}"><option value="To assign">To assign</option>${names.map(n => `<option ${n===v?"selected":""}>${esc(n)}</option>`).join("")}</select>`; break; }
+    case "check": return `<div class="fld chkf wide"><input type="checkbox" id="${id}" ${v?"checked":""}><label for="${id}">${esc(f.l)}</label></div>`;
+    default: inp = `<input type="text" id="${id}" value="${esc(v||"")}" ${f.ph?`placeholder="${esc(f.ph)}"`:""}>`;
+  }
+  return `<div class="fld${wide}">${lab}${inp}${hint}</div>`;
+}
+function readField(k) {
+  const f = F[k]; if (f.t === "file") return undefined;
+  const el = document.getElementById(`f-${k}`); if (!el) return undefined;
+  if (f.t === "check") return el.checked;
+  const raw = el.value.trim();
+  if (raw === "") return null;
+  if (f.t === "num") { const n = Number(raw); return isFinite(n) ? n : null; }
+  if (f.t === "pct") { const n = Number(raw); return isFinite(n) ? Math.round(n*10)/1000 : null; }
+  if (f.t === "amt") return /^-?\d+(\.\d+)?$/.test(raw) ? Number(raw) : raw;
+  return raw;
+}
+const picked = fields => fields.filter(k => F[k].t === "file").map(k => { const el = document.getElementById(`f-${k.replace(":","-")}`); return el && el.files && el.files.length ? {cat:F[k].cat, files:[...el.files]} : null; }).filter(Boolean);
+async function uploadPicked(fields) { const out = []; for (const p of picked(fields)) out.push(...await uploadFiles(p.files, p.cat)); return out; }
+
+function openModal({title, sub, ok, html, onSubmit, onDelete, onCancel, dealId, mode, hideOk, cancel, wide, focus = true}) {
+  $("#m-title").textContent = title; $("#m-sub").textContent = sub || ""; $("#m-sub").hidden = !sub;
+  $("#m-body").innerHTML = html; $("#m-ok").textContent = ok || "Save"; $("#m-ok").hidden = !!hideOk; $("#m-err").textContent = "";
+  $("#m-cancel").textContent = cancel || "Cancel";
+  $("#m-del").hidden = !onDelete; $("#m-del").textContent = "Delete deal"; $("#m-del").dataset.armed = "";
+  document.querySelector(".modal").classList.toggle("wide-m", !!wide);
+  MODAL = {onSubmit, onDelete, onCancel}; S.openId = dealId || null; S.openMode = mode || "form";
+  const wasHidden = $("#scrim").hidden; $("#scrim").hidden = false; if (wasHidden || mode === "view") $("#scrim").scrollTop = 0;
+  if (focus) { const first = $("#m-body").querySelector("input:not([type=file]),select,textarea"); if (first) setTimeout(() => first.focus(), 30); }
+}
+function closeModal() { $("#scrim").hidden = true; MODAL = null; S.openId = null; S.openMode = null; }
+$("#m-cancel").addEventListener("click", () => { if (MODAL && MODAL.onCancel) MODAL.onCancel(); else closeModal(); });
+$("#scrim").addEventListener("click", e => { if (e.target.id === "scrim") closeModal(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && MODAL) closeModal(); });
+$("#m-form").addEventListener("submit", async e => {
+  e.preventDefault(); if (!MODAL) return;
+  const btn = $("#m-ok"), label = btn.textContent, M = MODAL; btn.disabled = true;
+  if (picked(Object.keys(F)).length) btn.textContent = "Uploading…";
+  try { await M.onSubmit(); }
+  catch (err) { $("#m-err").textContent = err && err.userMsg ? err.userMsg : `Couldn't save. ${err && err.message ? err.message : ""}`; }
+  finally { btn.disabled = false; if (MODAL === M) btn.textContent = label; }
+});
+$("#m-del").addEventListener("click", async () => {
+  const b = $("#m-del");
+  if (!b.dataset.armed) { b.dataset.armed = "1"; b.textContent = "Tap again to delete"; return; }
+  try { await MODAL.onDelete(); } catch (err) { $("#m-err").textContent = `Couldn't delete. ${err.message||""}`; }
+});
+const need = (vals, req) => { const miss = (req||[]).filter(k => vals[k] == null || vals[k] === "" || (k==="ref" && /^HIP\s*$/i.test(vals[k])));
+  if (miss.length) throw uErr(`Please fill in: ${miss.map(k => F[k].l.replace(/\.$/,"")).join(", ")}.`); };
+
+/* ------------------------------------------------------------------ writes */
+const queues = new Map();
+const queued = (id, fn) => { const p = (queues.get(id) || Promise.resolve()).catch(() => {}).then(fn); queues.set(id, p); return p; };
+const ref = id => S.db.doc(`deals/${id}`);
+const strip = d => { const o = {}; for (const [k,v] of Object.entries(d)) if (!k.startsWith("_")) o[k] = v; return o; };
+async function patch(id, p) { return queued(id, () => ref(id).update({...p, updatedAt: Date.now()})); }
+async function put(id, data) { return queued(id, () => ref(id).set(data)); }
+function writeFail(err) {
+  if (err && err.code === "invalid_argument") { S.canWrite = false; setMode(); render(); toast("You can view this page but not change it."); }
+  else toast(`Couldn't save: ${err && err.message ? err.message : "try again"}`);
+}
+function newId(base) {
+  let id = String(base||"").trim().replace(/\s+/g,"-").replace(/[^A-Za-z0-9_\-.~:@+]/g,"") || `D-${Date.now().toString(36)}`;
+  if (id === "." || id === "..") id = `D-${Date.now().toString(36)}`;
+  let x = id, i = 2; while (S.deals.has(x)) x = `${id}-${i++}`; return x;
+}
+
+/* ------------------------------------------------------------------ toast */
+let tTimer = null;
+function toast(msg, undo) {
+  $("#t-msg").textContent = msg; const u = $("#t-undo"); u.hidden = !undo; u.onclick = null;
+  if (undo) u.onclick = async () => { $("#toast").hidden = true; try { await undo(); toast("Undone"); } catch (e) { writeFail(e); } };
+  $("#toast").hidden = false; clearTimeout(tTimer); tTimer = setTimeout(() => $("#toast").hidden = true, undo ? 9000 : 4000);
+}
+
+/* ------------------------------------------------------------------ actions */
+function runAction(act, id, fromView) {
+  const d = S.deals.get(id); if (!d) return;
+  if (act === "reopen") {
+    const prev = strip(d), to = d.prevStage || (d.paidOn ? "order" : d.signedOn ? "signed" : d.ref ? "offer" : "inquiry");
+    patch(id, {stage:to, outcome:null, paidOn: d.outcome==="paid" ? null : d.paidOn ?? null}).then(() => { toast(`${d.ref||d.client} reopened`, () => put(id, prev)); if (fromView) setTimeout(() => showView(id), 50); }).catch(writeFail);
+    return;
+  }
+  const A = ACTIONS[act]; if (!A) return;
+  const defs = A.defs ? A.defs(d) : {};
+  const vals = k => d[k] != null && d[k] !== "" ? d[k] : defs[k];
+  openModal({ title: A.title, sub: `${d.ref ? d.ref + " · " : ""}${d.client}${A.sub ? ". " + A.sub : ""}`, ok: A.ok, dealId: id,
+    cancel: fromView ? "Back" : "Cancel", onCancel: fromView ? () => showView(id) : null,
+    html: A.fields.map(k => fieldHTML(k, vals(k))).join(""),
+    onSubmit: async () => {
+      const v = {}; A.fields.forEach(k => { const x = readField(k); if (x !== undefined) v[k] = x; });
+      need(v, A.req);
+      const added = await uploadPicked(A.fields);
+      const prev = strip(d);
+      const p = A.apply(v, d); if (added.length) p.files = [...filesOf(d), ...added];
+      await patch(id, p).catch(e => { writeFail(e); throw e; });
+      if (fromView) setTimeout(() => showView(id), 50); else closeModal();
+      toast(A.done({...d, ...v}) + (added.length ? ` · ${added.length} file${added.length===1?"":"s"} attached` : ""), () => put(id, prev));
+    }});
+}
+function openNew(stage) {
+  const N = NEW[stage], defs = N.defs ? N.defs() : {};
+  openModal({ title: N.title, sub: N.sub, ok: "Add",
+    html: N.fields.map(k => fieldHTML(k, defs[k])).join(""),
+    onSubmit: async () => {
+      const v = {}; N.fields.forEach(k => { const x = readField(k); if (x !== undefined) v[k] = x; }); need(v, N.req);
+      const added = await uploadPicked(N.fields);
+      const data = Object.fromEntries(Object.entries(N.make(v)).filter(([,x]) => x !== null && x !== undefined));
+      if (added.length) data.files = added;
+      const id = newId(v.ref || `INQ-${Date.now().toString(36)}`);
+      await put(id, {...data, createdAt: Date.now(), updatedAt: Date.now()}).catch(e => { writeFail(e); throw e; });
+      closeModal(); toast(`${v.ref || v.client} added`, () => queued(id, () => ref(id).delete()));
+    }});
+}
+function openDeal(id) { showView(id); }
+function openEdit(id) {
+  const d = S.deals.get(id); if (!d) return;
+  const stageSel = `<div class="fld"><label for="f-_stage">Stage</label><select id="f-_stage">${STAGES.map(s => `<option value="${s.key}" ${s.key===d.stage?"selected":""}>${esc(s.title)}</option>`).join("")}</select><span class="hint">Use the step buttons normally. Change this only to correct a mistake.</span></div>`;
+  let html = stageSel + `<div class="fld"></div>`;
+  EDIT_GROUPS.forEach(([g, keys]) => { html += `<h4>${esc(g)}</h4>` + keys.map(k => fieldHTML(k, d[k])).join(""); });
+  openModal({ title: `Edit · ${d.client}`, sub: d.ref || "", ok: "Save changes", cancel: "Back", dealId: id, onCancel: () => showView(id),
+    html,
+    onSubmit: async () => {
+      const cur = S.deals.get(id) || d;
+      const p = {}; EDIT_GROUPS.forEach(([, keys]) => keys.forEach(k => { const x = readField(k); const old = d[k] ?? null;
+        const same = F[k].t === "check" ? (!!x === !!old) : JSON.stringify(x ?? null) === JSON.stringify(old === "" ? null : old);
+        if (!same) p[k] = x; }));
+      const st = $("#f-_stage").value; if (st !== d.stage) { p.stage = st; if (st === "closed" && !d.outcome) p.outcome = "lost"; if (st !== "closed") p.outcome = null; }
+      if (!Object.keys(p).length) { showView(id); return; }
+      need({client: p.client === undefined ? d.client : p.client}, ["client"]);
+      const prev = strip(cur);
+      await patch(id, p).catch(e => { writeFail(e); throw e; });
+      setTimeout(() => showView(id), 50); toast(`${d.ref || d.client} saved`, () => put(id, prev));
+    },
+    onDelete: async () => { const prev = strip(S.deals.get(id) || d); await queued(id, () => ref(id).delete()); closeModal(); toast(`${d.ref||d.client} deleted`, () => put(id, prev)); }
+  });
+}
+
+/* ------------------------------------------------------------------ events */
+document.addEventListener("click", e => {
+  const fl = e.target.closest("a[data-flink]");
+  if (fl && (!fileURL(fl.dataset.flink))) { e.preventDefault(); S.files.sign([fl.dataset.flink]).then(() => { const u = fileURL(fl.dataset.flink); if (u) location.href = u; else toast("Couldn't open the file. Check the connection."); }); return; }
+  const t = e.target.closest("[data-act],[data-open],[data-new],[data-tog],[data-jump],[data-f],[data-more],[data-fsave],[data-fdel]"); if (!t) return;
+  if (t.dataset.fsave) { const f = findFile(t.dataset.scope, t.dataset.owner, t.dataset.fsave); if (f) saveFile(f); return; }
+  if (t.dataset.fdel) {
+    if (t.dataset.armed !== "1") { t.dataset.armed = "1"; t.textContent = "Tap to confirm"; t.style.color = "var(--red)"; setTimeout(() => { if (t.isConnected) { t.dataset.armed = ""; t.textContent = "Remove"; t.style.color = ""; } }, 4000); return; }
+    return removeFile(t.dataset.scope, t.dataset.owner, t.dataset.fdel);
+  }
+  if (t.dataset.act) return runAction(t.dataset.act, t.dataset.id, t.dataset.from === "view");
+  if (t.dataset.open) { if (e.target.closest("a,label,input")) return; return openDeal(t.dataset.open); }
+  if (t.dataset.new) return openNew(t.dataset.new);
+  if (t.dataset.tog) { S.collapsed[t.dataset.tog] = !S.collapsed[t.dataset.tog]; saveUI(); return render(); }
+  if (t.dataset.more) { S.limit[t.dataset.more] = 9999; return render(); }
+  if (t.dataset.jump) { const k = t.dataset.jump; if (k === "closed" && !S.showClosed) { S.showClosed = true; $("#fc").checked = true; }
+    if (S.collapsed[k]) { S.collapsed[k] = false; saveUI(); } render(); const el = document.getElementById(`b-${k}`); if (el) el.scrollIntoView({behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"}); return; }
+  if ("f" in t.dataset) { S.fl = S.fl === t.dataset.f ? "" : t.dataset.f; if (S.fl) Object.keys(S.collapsed).forEach(k => S.collapsed[k] = false); return render(); }
+});
+document.addEventListener("change", e => {
+  const t = e.target;
+  if (t.matches("input[type=file][data-up]")) { const files = [...t.files]; t.value = ""; if (files.length) addFiles(t.dataset.up, t.dataset.owner, t.dataset.cat, files); return; }
+  if (t.matches("input[type=file][data-pick]")) { const n = document.getElementById(`${t.id}-n`); if (n) n.textContent = [...t.files].map(f => f.name).join(", "); }
+});
+let qT = null;
+$("#q").addEventListener("input", e => { clearTimeout(qT); qT = setTimeout(() => { S.q = e.target.value.trim().toLowerCase(); render(); }, 120); });
+$("#fs").addEventListener("change", e => { S.fs = e.target.value; render(); });
+$("#fc").addEventListener("change", e => { S.showClosed = e.target.checked; render(); });
+
+/* ------------------------------------------------------------------ settings */
+function renderSettings() {
+  const box = $("#setbox"); box.hidden = !S.canWrite; if (!S.canWrite) return;
+  const c = S.cfg, f = (id, label, v) => `<div class="fld"><label for="${id}">${esc(label)}</label><input type="number" min="0" id="${id}" value="${esc(v)}"></div>`;
+  $("#setform").innerHTML = f("s-rem","Remind client: days before arrival",c.remindDays) + f("s-due","Balance due after arrival: remind days before",c.dueRemindDays) +
+    f("s-fol","Follow up an offer after (days)",c.followDays) + f("s-inq","Inquiry waiting after (days)",c.inquiryDays) + f("s-bl","Warn 'no B/L' when ETA within (days)",c.blWarnDays) +
+    `<div class="fld wide" style="grid-column:1/-1"><label for="s-sales">Salesmen (comma separated)</label><input type="text" id="s-sales" value="${esc(c.salesmen.join(", "))}"></div>` +
+    `<div><button type="submit" class="btn primary sm">Save settings</button></div>`;
+}
+$("#setform").addEventListener("submit", async e => {
+  e.preventDefault();
+  const n = id => { const x = Number(document.getElementById(id).value); return isFinite(x) && x >= 0 ? x : 0; };
+  const next = {remindDays:n("s-rem"), dueRemindDays:n("s-due"), followDays:n("s-fol"), inquiryDays:n("s-inq"), blWarnDays:n("s-bl"),
+    salesmen: $("#s-sales").value.split(",").map(s => s.trim()).filter(Boolean)};
+  try { await queued("_cfg", () => S.db.doc("config/settings").set(next)); toast("Settings saved"); } catch (err) { writeFail(err); }
+});
+
+/* ------------------------------------------------------------------ Excel export */
+function loadXLSX() { return new Promise((res, rej) => { if (window.XLSX) return res(window.XLSX);
+  const s = document.createElement("script"); s.src = "vendor/xlsx.full.min.js";
+  s.onload = () => res(window.XLSX); s.onerror = () => rej(new Error("The Excel library did not load")); document.head.appendChild(s); }); }
+async function exportExcel() {
+  const btn = $("#xl"); btn.disabled = true; btn.textContent = "Preparing…";
+  try {
+    const X = await loadXLSX();
+    const rows = [...S.deals.values()].map(d => ({ ...d, _a: assess(d) })).sort((a,b) => STAGES.findIndex(s=>s.key===a.stage) - STAGES.findIndex(s=>s.key===b.stage) || cmp(a,b)).map(d => ({
+      "Stage": STAGES.find(s => s.key === d.stage)?.title || d.stage, "Alert": d._a.label, "Ref / order": d.ref || "", "Type": d.kind === "offshore" ? "Offshore" : "Local",
+      "Client": d.client || "", "Salesman": d.salesman || "", "Product": d.product || "", "Qty MT": isFinite(num(d.qty)) ? num(d.qty) : "", "Qty type": d.qtyType || "",
+      "Cur": d.cur || "", "Price / MT": d.price ?? "", "Value": value(d) || "", "Payment terms": d.terms || "", "Advance %": isFinite(num(d.advPct)) ? num(d.advPct) : "",
+      "Ship month": fM(d.shipMonth), "Valid until": fD(d.validUntil), "Offer date": fD(d.offerDate), "Signed on": fD(d.signedOn), "Mill order": d.millOrder || "",
+      "Mill PI no.": d.millRef || "", "PI signed on": fD(d.piOn), "Deposit on": fD(d.depositOn), "Shipped on": fD(d.shippedOn), "B/L": d.bl || "", "ETA": fD(d.eta),
+      "Arrived on": fD(d.arrivedOn), "Balance due": fDn(balanceDue(d)), "Paid on": fD(d.paidOn), "Port": d.port || "", "Profit": d.profit ?? "",
+      "Attachments": filesOf(d).map(f => `${CAT_NAME[f.cat]||"Other"}: ${f.name}`).join("; "), "Notes": d.notes || "" }));
+    const ws = X.utils.json_to_sheet(rows), wb = X.utils.book_new();
+    ws["!cols"] = Object.keys(rows[0] || {}).map(k => ({wch: Math.min(40, Math.max(8, k.length + 2, ...rows.slice(0,200).map(r => String(r[k]).length)))}));
+    X.utils.book_append_sheet(wb, ws, "Deals");
+    const buf = X.write(wb, {bookType:"xlsx", type:"array"});
+    await S.downloads.save({filename:`HIPCO-Deals-${todayISO()}.xlsx`, data: new Uint8Array(buf)});
+  } catch (err) { if (!err || err.code !== "declined") toast(`Excel not saved: ${err && err.message ? err.message : "try again"}`); }
+  finally { btn.disabled = false; btn.textContent = "Download Excel"; }
+}
+
+/* ------------------------------------------------------------------ boot */
+function setMode() { const m = $("#mode"); m.textContent = S.canWrite ? "You can edit" : "View only"; m.className = "badge" + (S.canWrite ? " edit" : ""); }
+const isStandalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+let deferredInstall = null;
+window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); deferredInstall = e; showInstall(); });
+function showInstall() {
+  const box = $("#install"); if (isStandalone() || S.installHidden) { box.hidden = true; return; }
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  $("#install-txt").innerHTML = deferredInstall ? "<b>Install HIPCO Deals</b> on this phone to open it from an icon."
+    : ios ? "<b>Add to Home Screen:</b> tap the Share button in Safari, then <b>Add to Home Screen</b>."
+          : "<b>Install:</b> open the browser menu (⋮) and tap <b>Install app</b> or <b>Add to Home screen</b>.";
+  $("#install-btn").hidden = !deferredInstall; box.hidden = false;
+}
+$("#install-btn").addEventListener("click", async () => { if (!deferredInstall) return; deferredInstall.prompt(); try { await deferredInstall.userChoice; } catch (e) {} deferredInstall = null; showInstall(); });
+$("#install-x").addEventListener("click", () => { S.installHidden = true; saveUI(); $("#install").hidden = true; });
+$("#signout").addEventListener("click", async () => { if (!confirmTwice($("#signout"), "Tap again to sign out")) return; await window.HIPCO.signOut(); location.reload(); });
+function confirmTwice(btn, msg) { if (btn.dataset.armed === "1") return true; const old = btn.textContent; btn.dataset.armed = "1"; btn.textContent = msg; setTimeout(() => { btn.dataset.armed = ""; btn.textContent = old; }, 4000); return false; }
+
+function showLogin(msg) {
+  $("#app").hidden = true; $("#login").hidden = false;
+  if (msg) $("#login-msg").textContent = msg;
+  setTimeout(() => $("#l-email").focus(), 50);
+}
+$("#login-form").addEventListener("submit", async e => {
+  e.preventDefault(); const btn = $("#login-btn"); $("#login-err").textContent = ""; btn.disabled = true; btn.textContent = "Signing in…";
+  try { const u = await window.HIPCO.signIn($("#l-email").value, $("#l-pass").value); await start(u); }
+  catch (err) { $("#login-err").textContent = err.message || "Couldn't sign in. Check the connection."; }
+  finally { btn.disabled = false; btn.textContent = "Sign in"; }
+});
+
+async function start(u) {
+  let role;
+  try { role = await window.HIPCO.role(u); }
+  catch (e) { showLogin("Couldn't reach the server. Check the connection and try again."); return; }
+  if (role !== "editor" && role !== "viewer") { await window.HIPCO.signOut(); showLogin("This account isn't on the HIPCO team list yet. Ask Bob to add it."); return; }
+  const B = window.HIPCO.connect();
+  S.db = B.db; S.files = B.files; S.assets = B.assets; S.downloads = B.downloads;
+  S.canWrite = await B.user.canEdit();
+  $("#login").hidden = true; $("#app").hidden = false;
+  $("#acct").textContent = `Signed in as ${B.user.email() || u.email}`;
+  setMode(); renderSettings(); showInstall();
+  const b = $("#xl"); b.hidden = false; b.onclick = exportExcel;
+  B.onStatus(st => { const el = $("#sync"); el.className = "sync" + (!st.online || st.pending ? " off" : "");
+    el.textContent = !st.online ? `· Offline${st.pending ? `, ${st.pending} change${st.pending===1?"":"s"} saved on this phone` : ""}` : st.pending ? `· Sending ${st.pending} change${st.pending===1?"":"s"}…` : "· Up to date"; });
+  S.db.doc("config/settings").onSnapshot(s => { if (s.exists) S.cfg = {...DEFAULTS, ...s.data()}; renderSettings(); if (S.loaded) render(); });
+  S.db.collection("clients").onSnapshot(snap => { const m = new Map(); snap.docs.forEach(doc => m.set(doc.id, doc.data())); S.clients = m; refreshOpen(); });
+  S.db.collection("deals").onSnapshot(snap => {
+    const m = new Map(); snap.docs.forEach(doc => m.set(doc.id, {...doc.data(), _id: doc.id}));
+    S.deals = m; S.loaded = true;
+    $("#sub").textContent = `${m.size} deals · live · ${fD(todayISO())}`;
+    render(); refreshOpen();
+  });
+}
+async function boot() {
+  if (window.HIPCO_TEST_BACKEND) { window.HIPCO = window.HIPCO_TEST_BACKEND; }
+  else if (!window.HIPCO || !window.HIPCO.configured) { showLogin("This app isn't connected to its database yet. Bob is setting it up."); $("#login-fields").hidden = $("#login-pw").hidden = $("#login-btn").hidden = true; return; }
+  let u = null; try { u = await window.HIPCO.session(); } catch (e) {}
+  if (u) start(u); else showLogin();
+}
+if ("serviceWorker" in navigator && !window.HIPCO_TEST_BACKEND) {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (reloaded) return; reloaded = true; toast("App updated. Reloading…"); setTimeout(() => location.reload(), 800); });
+}
+boot();
+})();
+</script>
+</body>
+</html>
