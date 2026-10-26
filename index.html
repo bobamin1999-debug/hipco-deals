@@ -157,6 +157,8 @@ button.st:hover{border-color:var(--brand);color:var(--brand);background:var(--sk
 .modal{background:var(--surface);color:var(--ink);border-radius:14px;width:min(680px,100%);box-shadow:0 20px 60px rgba(11,26,63,.25);border:1px solid var(--line)}
 .modal header{padding:18px 20px 8px;border-bottom:1px solid var(--line);background:var(--sky);border-radius:14px 14px 0 0}
 .modal h3{font-family:var(--f-display);font-size:24px;font-weight:700;margin:0;line-height:1.1;color:var(--brand)}
+.modal header{position:sticky;top:0;z-index:3}
+.m-back{border:0;background:transparent;color:var(--brand);font:600 14px var(--f-body);padding:4px 0 6px;margin:-6px 0 2px;cursor:pointer;display:block}
 .modal header p{margin:4px 0 0;color:var(--muted);font-size:13px}
 .m-body{padding:12px 20px 6px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px}
 .m-body h4{grid-column:1 / -1;margin:12px 0 0;font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--link);border-top:1px solid var(--line);padding-top:12px}
@@ -383,7 +385,7 @@ img{max-width:100%}
 <div class="scrim" id="scrim" hidden>
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="m-title">
     <form id="m-form" novalidate>
-      <header><h3 id="m-title"></h3><p id="m-sub"></p></header>
+      <header><button type="button" class="m-back" id="m-back" aria-label="Back">‹ Back</button><h3 id="m-title"></h3><p id="m-sub"></p></header>
       <div class="m-body" id="m-body"></div>
       <footer>
         <span id="m-err"></span>
@@ -432,6 +434,8 @@ const S = {db:null, files:null, assets:null, downloads:null, canWrite:false, loa
 try { const c = JSON.parse(localStorage.getItem("hipco-deals-ui")||"{}"); S.collapsed = c.collapsed||{}; S.installHidden = !!c.installHidden; S.tab = c.tab || "home"; } catch(e) {}
 const TABS = ["home","inquiry","offer","signed","order","closed"];
 if (TABS.includes(location.hash.slice(1))) S.tab = location.hash.slice(1);
+/* phone back button: an entry for the open tab and one for an open deal, so "back" closes the deal, then returns to Overview */
+try { history.replaceState(null, "", location.pathname); if (S.tab !== "home") history.pushState({t:1}, "", `#${S.tab}`); } catch (e) {}
 const saveUI = () => { try { localStorage.setItem("hipco-deals-ui", JSON.stringify({collapsed:S.collapsed, installHidden:!!S.installHidden, tab:S.tab})); } catch(e) {} };
 
 /* ------------------------------------------------------------------ helpers */
@@ -785,7 +789,12 @@ function overviewHTML(all, open) {
 function goTab(k) {
   if (!TABS.includes(k)) k = "home";
   S.tab = k; if (k !== "home") S.fl = ""; saveUI();
-  try { history.replaceState(null, "", k === "home" ? location.pathname : `#${k}`); } catch (e) {}
+  try {
+    const onTab = history.state && history.state.t;
+    if (k === "home") { if (onTab) { S.navSkip = true; history.back(); } }
+    else if (onTab) history.replaceState({t:1}, "", `#${k}`);
+    else history.pushState({t:1}, "", `#${k}`);
+  } catch (e) {}
   render(); window.scrollTo({top: 0});
 }
 function emptyText(k) {
@@ -1005,10 +1014,23 @@ function openModal({title, sub, ok, html, onSubmit, onDelete, onCancel, dealId, 
   $("#m-del").hidden = !onDelete; $("#m-del").textContent = "Delete deal"; $("#m-del").dataset.armed = "";
   document.querySelector(".modal").classList.toggle("wide-m", !!wide);
   MODAL = {onSubmit, onDelete, onCancel}; S.openId = dealId || null; S.openMode = mode || "form";
-  const wasHidden = $("#scrim").hidden; $("#scrim").hidden = false; if (wasHidden || mode === "view") $("#scrim").scrollTop = 0;
+  const wasHidden = $("#scrim").hidden; $("#scrim").hidden = false;
+  if (wasHidden && !S.navSkip) { try { history.pushState({m:1, t:!!(history.state && history.state.t)}, "", location.href); } catch (e) {} } if (wasHidden || mode === "view") $("#scrim").scrollTop = 0;
   if (focus) { const first = $("#m-body").querySelector("input:not([type=file]),select,textarea"); if (first) setTimeout(() => first.focus(), 30); }
 }
-function closeModal() { $("#scrim").hidden = true; MODAL = null; S.openId = null; S.openMode = null; }
+function hideModal() { $("#scrim").hidden = true; MODAL = null; S.openId = null; S.openMode = null; }
+function closeModal() { const was = !$("#scrim").hidden; hideModal(); if (was && history.state && history.state.m) { S.navSkip = true; try { history.back(); } catch (e) { S.navSkip = false; } } }
+$("#m-back").addEventListener("click", () => closeModal());
+window.addEventListener("popstate", () => {
+  if (S.navSkip) {                       // our own history.back(); a deal may have been reopened meanwhile
+    S.navSkip = false;
+    if (!$("#scrim").hidden) { try { history.pushState({m:1, t:!!(history.state && history.state.t)}, "", location.href); } catch (e) {} }
+    return;
+  }
+  if (!$("#scrim").hidden) { hideModal(); return; }   // phone back while a deal is open: close it
+  const h = location.hash.slice(1), k = TABS.includes(h) ? h : "home";
+  if (k !== S.tab) { S.tab = k; if (k !== "home") S.fl = ""; saveUI(); render(); window.scrollTo({top: 0}); }
+});
 $("#m-cancel").addEventListener("click", () => { if (MODAL && MODAL.onCancel) MODAL.onCancel(); else closeModal(); });
 $("#scrim").addEventListener("click", e => { if (e.target.id === "scrim") closeModal(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && MODAL) closeModal(); });
