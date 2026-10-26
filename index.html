@@ -316,6 +316,12 @@ img{max-width:100%}
 .login-card .fld input{font-size:16px}
 .login-card .err{color:var(--red);font-size:13px;min-height:1em}
 .login-card .btn{padding:10px 14px;font-size:15px}
+.biz-btn{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;width:100%;padding:18px 18px;border-radius:14px;border:1.5px solid var(--line);background:var(--sky);color:var(--ink);cursor:pointer;font:inherit}
+.biz-btn:hover,.biz-btn:focus-visible{border-color:var(--brand)}
+.biz-btn b{font-family:var(--f-display);font-size:24px;color:var(--brand);font-weight:600}
+.biz-btn span{font-size:13px;color:var(--muted)}
+.biz-btn .u{color:var(--red);font-weight:600}
+.bizsw{border:1px solid var(--line);background:var(--surface);color:var(--brand);border-radius:999px;padding:3px 10px;font:600 12px var(--f-body);cursor:pointer;margin-left:8px;vertical-align:middle}
 .install{display:flex;gap:12px;align-items:flex-start;background:var(--sky);border:1px solid var(--sky-2);border-radius:12px;padding:10px 14px;font-size:13px;color:var(--ink)}
 .install b{color:var(--brand)}
 .install .sp{flex:1}
@@ -338,12 +344,21 @@ img{max-width:100%}
   </form>
 </section>
 
+<section class="login" id="biz" hidden>
+  <div class="login-card">
+    <img src="icons/logo.png" alt="HIPCO, Hammoud International Paper SAL">
+    <h1>Which business?</h1>
+    <p>Beirut and offshore are kept completely separate. You can switch any time from the top of the app.</p>
+    <button type="button" class="biz-btn" data-biz="local"><b>Beirut business</b><span id="biz-local">Loading…</span></button>
+    <button type="button" class="biz-btn" data-biz="offshore"><b>Offshore business</b><span id="biz-offshore">Loading…</span></button>
+  </div>
+</section>
 <div class="wrap" id="app" hidden>
   <header class="top">
     <div class="brand">
       <img src="icons/logo.png" alt="HIPCO, Hammoud International Paper SAL" width="118" height="44">
       <div class="ttl">
-        <h1>Deals</h1>
+        <h1><span id="biz-name">Deals</span><button type="button" class="bizsw" id="bizsw">Switch</button></h1>
         <p id="sub">Inquiry → offer → signed → order → paid</p>
       </div>
     </div>
@@ -433,9 +448,29 @@ const S = {db:null, files:null, assets:null, downloads:null, canWrite:false, loa
   q:"", fs:"", fl:"", tab:"home", collapsed:{}, limit:{}, openId:null, busy:{}};
 try { const c = JSON.parse(localStorage.getItem("hipco-deals-ui")||"{}"); S.collapsed = c.collapsed||{}; S.installHidden = !!c.installHidden; S.tab = c.tab || "home"; } catch(e) {}
 const TABS = ["home","inquiry","offer","signed","order","closed"];
-if (TABS.includes(location.hash.slice(1))) S.tab = location.hash.slice(1);
-/* phone back button: an entry for the open tab and one for an open deal, so "back" closes the deal, then returns to Overview */
-try { history.replaceState(null, "", location.pathname); if (S.tab !== "home") history.pushState({t:1}, "", `#${S.tab}`); } catch (e) {}
+/* phone back button: business chooser is the root; then Overview {b}, a tab {t}, an open deal {m}.
+   "back" closes the deal, then returns to Overview, then to the chooser. */
+S.tab = "home"; S.biz = null;
+try { history.replaceState(null, "", location.pathname); } catch (e) {}
+const kindOf = d => d.kind === "offshore" ? "offshore" : "local";
+const BIZ_NAME = {local:"Beirut", offshore:"Offshore"};
+function bizStats(k) {
+  const l = [...S.deals.values()].filter(d => kindOf(d) === k), o = l.filter(d => d.stage !== "closed");
+  const u = o.filter(d => assess(d).level === 1).length;
+  return `${o.length} open deal${o.length===1?"":"s"}` + (u ? ` · <span class="u">${u} urgent</span>` : "");
+}
+function showChooser() {
+  if (!$("#scrim").hidden) hideModal();
+  S.biz = null; $("#app").hidden = true; $("#biz").hidden = false; renderChooser(); window.scrollTo({top:0});
+}
+function renderChooser() { if (!S.loaded) return; for (const k of ["local","offshore"]) $(`#biz-${k}`).innerHTML = bizStats(k); }
+function chooseBiz(k) {
+  S.biz = k; S.tab = "home"; S.fl = ""; S.q = ""; const q = $("#q"); if (q) q.value = "";
+  $("#biz").hidden = true; $("#app").hidden = false; $("#biz-name").textContent = BIZ_NAME[k];
+  try { history.pushState({b:1}, "", location.pathname); } catch (e) {}
+  if (S.loaded) render(); window.scrollTo({top:0});
+}
+document.addEventListener("click", e => { const b = e.target.closest("[data-biz]"); if (b) chooseBiz(b.dataset.biz); });
 const saveUI = () => { try { localStorage.setItem("hipco-deals-ui", JSON.stringify({collapsed:S.collapsed, installHidden:!!S.installHidden, tab:S.tab})); } catch(e) {} };
 
 /* ------------------------------------------------------------------ helpers */
@@ -555,13 +590,13 @@ const ACTIONS = {
 const NEW = {
   inquiry:{title:"New inquiry", sub:"A request from a salesman. Make it an offer when you send prices.",
     fields:["inqDate","salesman","client","contact","product","spec","qty","dest","notes","file:inquiry"], defs:()=>({inqDate:today()}), req:["client"],
-    make:v=>({...v,stage:"inquiry",kind:"local"})},
+    make:v=>({...v,stage:"inquiry",kind:S.biz || "local"})},
   offer:{title:"New offer", sub:"An offer sent without an inquiry row.",
     fields:["ref","offerDate","client","contact","salesman","product","spec","qty","qtyType","cur","price","total","terms","advPct","balDays","shipMonth","validUntil","notes","file:offer"],
-    defs:()=>({ref:"HIP ",offerDate:today(),cur:"USD",qtyType:"Firm"}), req:["ref","client","price"], make:v=>({...v,stage:"offer",kind:"local"})},
+    defs:()=>({ref:"HIP ",offerDate:today(),cur:"USD",qtyType:"Firm"}), req:["ref","client","price"], make:v=>({...v,stage:"offer",kind:S.biz || "local"})},
   order:{title:"New order", sub:"An order already confirmed by the mill, e.g. an offshore deal.",
     fields:["ref","kind","client","port","supplier","product","qty","cur","purchase","price","total","profit","advPct","balDays","millRef","eta","shipMonth","notes","file:pi"],
-    defs:()=>({kind:"offshore",cur:"USD"}), req:["ref","client"], make:v=>({...v,stage:"order",millOrder:v.millOrder||v.ref})}
+    defs:()=>({kind:S.biz || "offshore",cur:"USD"}), req:["ref","client"], make:v=>({...v,stage:"order",millOrder:v.millOrder||v.ref})}
 };
 const EDIT_GROUPS = [
   ["Deal",["client","contact","salesman","kind","product","spec","qty","qtyType","dest","inqDate"]],
@@ -717,7 +752,10 @@ function totalsText(list) {
 }
 
 function render() {
-  const all = [...S.deals.values()];
+  renderChooser();
+  if (!S.biz) return;
+  const all = [...S.deals.values()].filter(d => kindOf(d) === S.biz);
+  $("#sub").textContent = `${all.length} deals · live · ${fD(todayISO())}`;
   all.forEach(d => d._a = assess(d));
   const open = all.filter(d => d.stage !== "closed");
   $("#pipe").innerHTML = STAGES.map(s => {
@@ -792,8 +830,8 @@ function goTab(k) {
   try {
     const onTab = history.state && history.state.t;
     if (k === "home") { if (onTab) { S.navSkip = true; history.back(); } }
-    else if (onTab) history.replaceState({t:1}, "", `#${k}`);
-    else history.pushState({t:1}, "", `#${k}`);
+    else if (onTab) history.replaceState({b:1, t:1}, "", `#${k}`);
+    else history.pushState({b:1, t:1}, "", `#${k}`);
   } catch (e) {}
   render(); window.scrollTo({top: 0});
 }
@@ -1015,19 +1053,21 @@ function openModal({title, sub, ok, html, onSubmit, onDelete, onCancel, dealId, 
   document.querySelector(".modal").classList.toggle("wide-m", !!wide);
   MODAL = {onSubmit, onDelete, onCancel}; S.openId = dealId || null; S.openMode = mode || "form";
   const wasHidden = $("#scrim").hidden; $("#scrim").hidden = false;
-  if (wasHidden && !S.navSkip) { try { history.pushState({m:1, t:!!(history.state && history.state.t)}, "", location.href); } catch (e) {} } if (wasHidden || mode === "view") $("#scrim").scrollTop = 0;
+  if (wasHidden && !S.navSkip) { try { history.pushState({...(history.state || {}), m:1}, "", location.href); } catch (e) {} } if (wasHidden || mode === "view") $("#scrim").scrollTop = 0;
   if (focus) { const first = $("#m-body").querySelector("input:not([type=file]),select,textarea"); if (first) setTimeout(() => first.focus(), 30); }
 }
 function hideModal() { $("#scrim").hidden = true; MODAL = null; S.openId = null; S.openMode = null; }
 function closeModal() { const was = !$("#scrim").hidden; hideModal(); if (was && history.state && history.state.m) { S.navSkip = true; try { history.back(); } catch (e) { S.navSkip = false; } } }
 $("#m-back").addEventListener("click", () => closeModal());
+$("#bizsw").addEventListener("click", () => { const st = history.state || {}; if (st.b) { try { history.go(st.t ? -2 : -1); return; } catch (e) {} } showChooser(); });
 window.addEventListener("popstate", () => {
   if (S.navSkip) {                       // our own history.back(); a deal may have been reopened meanwhile
     S.navSkip = false;
-    if (!$("#scrim").hidden) { try { history.pushState({m:1, t:!!(history.state && history.state.t)}, "", location.href); } catch (e) {} }
+    if (!$("#scrim").hidden) { try { history.pushState({...(history.state || {}), m:1}, "", location.href); } catch (e) {} }
     return;
   }
   if (!$("#scrim").hidden) { hideModal(); return; }   // phone back while a deal is open: close it
+  if (!(history.state && history.state.b)) { if (S.biz) showChooser(); return; }   // back from Overview: business chooser
   const h = location.hash.slice(1), k = TABS.includes(h) ? h : "home";
   if (k !== S.tab) { S.tab = k; if (k !== "home") S.fl = ""; saveUI(); render(); window.scrollTo({top: 0}); }
 });
@@ -1191,7 +1231,7 @@ async function exportExcel() {
   const btn = $("#xl"); btn.disabled = true; btn.textContent = "Preparing…";
   try {
     const X = await loadXLSX();
-    const rows = [...S.deals.values()].map(d => ({ ...d, _a: assess(d) })).sort((a,b) => STAGES.findIndex(s=>s.key===a.stage) - STAGES.findIndex(s=>s.key===b.stage) || cmp(a,b)).map(d => ({
+    const rows = [...S.deals.values()].filter(d => !S.biz || kindOf(d) === S.biz).map(d => ({ ...d, _a: assess(d) })).sort((a,b) => STAGES.findIndex(s=>s.key===a.stage) - STAGES.findIndex(s=>s.key===b.stage) || cmp(a,b)).map(d => ({
       "Stage": STAGES.find(s => s.key === d.stage)?.title || d.stage, "Alert": d._a.label, "Ref / order": d.ref || "", "Type": d.kind === "offshore" ? "Offshore" : "Local",
       "Client": d.client || "", "Salesman": d.salesman || "", "Product": d.product || "", "Qty MT": isFinite(num(d.qty)) ? num(d.qty) : "", "Qty type": d.qtyType || "",
       "Cur": d.cur || "", "Price / MT": d.price ?? "", "Value": value(d) || "", "Payment terms": d.terms || "", "Advance %": isFinite(num(d.advPct)) ? num(d.advPct) : "",
@@ -1203,7 +1243,7 @@ async function exportExcel() {
     ws["!cols"] = Object.keys(rows[0] || {}).map(k => ({wch: Math.min(40, Math.max(8, k.length + 2, ...rows.slice(0,200).map(r => String(r[k]).length)))}));
     X.utils.book_append_sheet(wb, ws, "Deals");
     const buf = X.write(wb, {bookType:"xlsx", type:"array"});
-    await S.downloads.save({filename:`HIPCO-Deals-${todayISO()}.xlsx`, data: new Uint8Array(buf)});
+    await S.downloads.save({filename:`HIPCO-${S.biz ? BIZ_NAME[S.biz] + "-" : ""}Deals-${todayISO()}.xlsx`, data: new Uint8Array(buf)});
   } catch (err) { if (!err || err.code !== "declined") toast(`Excel not saved: ${err && err.message ? err.message : "try again"}`); }
   finally { btn.disabled = false; btn.textContent = "Download Excel"; }
 }
@@ -1227,7 +1267,7 @@ $("#signout").addEventListener("click", async () => { if (!confirmTwice($("#sign
 function confirmTwice(btn, msg) { if (btn.dataset.armed === "1") return true; const old = btn.textContent; btn.dataset.armed = "1"; btn.textContent = msg; setTimeout(() => { btn.dataset.armed = ""; btn.textContent = old; }, 4000); return false; }
 
 function showLogin(msg) {
-  $("#app").hidden = true; $("#login").hidden = false;
+  $("#app").hidden = true; $("#biz").hidden = true; $("#login").hidden = false;
   if (msg) $("#login-msg").textContent = msg;
   setTimeout(() => $("#l-email").focus(), 50);
 }
@@ -1246,7 +1286,7 @@ async function start(u) {
   const B = window.HIPCO.connect();
   S.db = B.db; S.files = B.files; S.assets = B.assets; S.downloads = B.downloads;
   S.canWrite = await B.user.canEdit();
-  $("#login").hidden = true; $("#app").hidden = false;
+  $("#login").hidden = true; showChooser();
   $("#acct").textContent = `Signed in as ${B.user.email() || u.email}`;
   setMode(); renderSettings(); showInstall();
   const b = $("#xl"); b.hidden = false; b.onclick = exportExcel;
@@ -1257,7 +1297,6 @@ async function start(u) {
   S.db.collection("deals").onSnapshot(snap => {
     const m = new Map(); snap.docs.forEach(doc => m.set(doc.id, {...doc.data(), _id: doc.id}));
     S.deals = m; S.loaded = true;
-    $("#sub").textContent = `${m.size} deals · live · ${fD(todayISO())}`;
     render(); refreshOpen();
   });
 }
