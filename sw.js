@@ -1,7 +1,7 @@
 /* HIPCO Deals service worker: opens fast and works offline.
    App files: newest from the network, but if the network takes more than 3 s use the saved copy.
    Change VERSION on every release so phones pick up the new files. */
-const VERSION = "hipco-deals-v1";
+const VERSION = "hipco-deals-v2";
 const SHELL = ["./", "index.html", "config.js", "db.js", "manifest.json", "vendor/supabase.js",
   "icons/logo.png", "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png"];
 

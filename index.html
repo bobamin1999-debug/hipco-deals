@@ -244,6 +244,29 @@ button.st:hover{border-color:var(--brand);color:var(--brand);background:var(--sk
 .kv b{font-weight:500;overflow-wrap:anywhere}
 .v-notes{white-space:pre-wrap;font-size:13px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:0}
 
+/* pages (tabs) */
+.tabs{display:flex;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:4px;box-shadow:var(--shadow);position:sticky;top:env(safe-area-inset-top,0px);z-index:6}
+.tabs button{flex:1 1 0;min-width:0;border:0;background:transparent;border-radius:9px;padding:8px 6px;display:flex;flex-direction:column;align-items:center;gap:1px;color:var(--muted);font-size:12.5px;font-weight:500}
+.tabs button b{font-family:var(--f-display);font-size:20px;line-height:1;color:var(--brand)}
+.tabs button .tl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.tabs button:hover{background:var(--sky)}
+.tabs button[aria-current="page"]{background:var(--brand);color:#FFFFFF}
+.tabs button[aria-current="page"] b{color:#FFFFFF}
+.tabs .dotn{display:inline-block;min-width:16px;height:16px;border-radius:8px;background:var(--red);color:#FFFFFF;font-size:10.5px;font-weight:600;line-height:16px;padding:0 4px}
+.tools{top:calc(env(safe-area-inset-top,0px) + 64px)}
+.page-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px}
+.page-h h2{font-family:var(--f-display);font-weight:700;font-size:28px;margin:0;color:var(--brand)}
+.page-h .meta{color:var(--muted);font-size:13px}
+@media (max-width:720px){
+  .tabs{position:fixed;left:0;right:0;bottom:0;top:auto;border-radius:0;border-width:1px 0 0;box-shadow:0 -4px 16px rgba(11,26,63,.08);
+    padding:6px max(6px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(6px,env(safe-area-inset-left,0px))}
+  .tabs button{padding:6px 2px;font-size:11px}
+  .tabs button b{font-size:18px}
+  .tools{top:env(safe-area-inset-top,0px)}
+  body{padding-bottom:calc(110px + env(safe-area-inset-bottom,0px))}
+  .toast{bottom:calc(86px + env(safe-area-inset-bottom,0px))}
+}
+
 /* toast */
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:60;background:var(--brand);color:#FFFFFF;
   border-radius:10px;padding:10px 12px 10px 16px;display:flex;gap:12px;align-items:center;box-shadow:0 10px 30px rgba(11,26,63,.25);max-width:calc(100% - 32px);font-size:13.5px}
@@ -311,6 +334,8 @@ img{max-width:100%}
     <button type="button" class="btn sm ghost" id="install-x">Hide</button>
   </div>
 
+  <nav class="tabs" id="tabs" aria-label="Pages"></nav>
+
   <nav class="pipe" id="pipe" aria-label="Deals by stage"></nav>
 
   <div class="attn" id="attn"></div>
@@ -318,7 +343,6 @@ img{max-width:100%}
   <div class="tools" id="tools">
     <input type="search" id="q" placeholder="Search client, ref, product, B/L…" aria-label="Search deals">
     <select id="fs" aria-label="Salesman"><option value="">All salesmen</option></select>
-    <label class="chk"><input type="checkbox" id="fc"> Show closed</label>
   </div>
 
   <main id="bands"><div class="status" id="status">Loading deals…</div></main>
@@ -381,9 +405,11 @@ const CLIP = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-
 
 /* ------------------------------------------------------------------ state */
 const S = {db:null, files:null, assets:null, downloads:null, canWrite:false, loaded:false, deals:new Map(), clients:new Map(), cfg:{...DEFAULTS},
-  q:"", fs:"", fl:"", showClosed:false, collapsed:{}, limit:{}, openId:null, busy:{}};
-try { const c = JSON.parse(localStorage.getItem("hipco-deals-ui")||"{}"); S.collapsed = c.collapsed||{}; S.installHidden = !!c.installHidden; } catch(e) {}
-const saveUI = () => { try { localStorage.setItem("hipco-deals-ui", JSON.stringify({collapsed:S.collapsed, installHidden:!!S.installHidden})); } catch(e) {} };
+  q:"", fs:"", fl:"", tab:"home", collapsed:{}, limit:{}, openId:null, busy:{}};
+try { const c = JSON.parse(localStorage.getItem("hipco-deals-ui")||"{}"); S.collapsed = c.collapsed||{}; S.installHidden = !!c.installHidden; S.tab = c.tab || "home"; } catch(e) {}
+const TABS = ["home","inquiry","offer","signed","order","closed"];
+if (TABS.includes(location.hash.slice(1))) S.tab = location.hash.slice(1);
+const saveUI = () => { try { localStorage.setItem("hipco-deals-ui", JSON.stringify({collapsed:S.collapsed, installHidden:!!S.installHidden, tab:S.tab})); } catch(e) {} };
 
 /* ------------------------------------------------------------------ helpers */
 const $ = s => document.querySelector(s);
@@ -680,28 +706,41 @@ function render() {
     (S.fl ? `<button type="button" class="btn ghost sm" data-f="">Show all</button>` : "");
   const sel = $("#fs"), cur = sel.value, names = [...new Set([...S.cfg.salesmen, ...all.map(d=>d.salesman).filter(Boolean)])];
   sel.innerHTML = `<option value="">All salesmen</option>` + names.map(n => `<option ${n===cur?"selected":""}>${esc(n)}</option>`).join("");
-  $("#bands").innerHTML = STAGES.map((s, i) => {
-    if (s.key === "closed" && !S.showClosed) return "";
-    const inStage = all.filter(d => d.stage === s.key);
-    const list = inStage.filter(visible).sort(cmp);
-    const collapsed = !!S.collapsed[s.key];
-    const lim = S.limit[s.key] || 80;
-    const add = S.canWrite && s.add ? `<button type="button" class="btn sm" data-new="${s.key}">+ ${esc(s.add)}</button>` : "";
-    const filtered = list.length !== inStage.length ? ` · showing ${list.length}` : "";
-    let body = "";
-    if (!collapsed) {
-      if (!inStage.length) body = `<div class="empty"><span>${esc(emptyText(s.key))}</span>${add}</div>`;
-      else if (!list.length) body = `<div class="empty"><span>No deals here match the filter.</span></div>`;
-      else body = `<div class="list">${list.slice(0, lim).map(rowHTML).join("")}</div>` +
-        (list.length > lim ? `<div class="more"><button type="button" class="btn" data-more="${s.key}">Show ${list.length - lim} more</button></div>` : "");
-    }
-    return `<section class="band" id="b-${s.key}" data-stage="${s.key}">
-      <div class="band-h"><h2><span class="step">${i<4?`0${i+1}`:"—"}</span>${esc(s.title)}</h2>
-        <span class="meta">${inStage.length ? `${inStage.length} · ${esc(totalsText(inStage))}${filtered} · ` : ""}${esc(s.sub)}</span>
-        <span class="sp"></span>${inStage.length?add:""}
-        <button type="button" class="tog" data-tog="${s.key}" aria-expanded="${!collapsed}">${collapsed?"Show":"Hide"}</button></div>
-      ${body}</section>`;
+  const TAB_LBL = {home:"Overview", inquiry:"Inquiries", offer:"Offers", signed:"Signed", order:"Orders", closed:"Closed"};
+  const urgent = st => open.filter(d => (st ? d.stage === st : true) && d._a.level === 1).length;
+  $("#tabs").innerHTML = TABS.map(k => {
+    const n = k === "home" ? open.filter(d => d._a.level === 1 || d._a.level === 2).length : all.filter(d => d.stage === k).length;
+    const u = k !== "home" && k !== "closed" ? urgent(k) : 0;
+    return `<button type="button" data-tab="${k}" ${S.tab===k?'aria-current="page"':""}><b>${n}</b><span class="tl">${TAB_LBL[k]}${u?` <span class="dotn">${u}</span>`:""}</span></button>`;
   }).join("");
+  const home = S.tab === "home";
+  $("#pipe").hidden = !home; $("#attn").hidden = !home;
+  if (home) {
+    const list = open.filter(visible).filter(d => S.fl ? true : d._a.level === 1 || d._a.level === 2).sort(cmp);
+    const title = S.fl ? {"1":"Urgent","2":"This week","3":"Sales follow-up","arr":"Arriving in 30 days"}[S.fl] : "Needs attention";
+    const lim = S.limit.home || 60;
+    $("#bands").innerHTML = `<section class="band"><div class="page-h"><h2>${esc(title)}</h2><span class="meta">${list.length} deal${list.length===1?"":"s"} · tap one to open it</span></div>
+      ${list.length ? `<div class="list">${list.slice(0, lim).map(rowHTML).join("")}</div>` + (list.length > lim ? `<div class="more"><button type="button" class="btn" data-more="home">Show ${list.length - lim} more</button></div>` : "")
+                    : `<div class="empty"><span>Nothing needs attention right now.</span></div>`}</section>`;
+    return;
+  }
+  const s = STAGES.find(x => x.key === S.tab), inStage = all.filter(d => d.stage === s.key);
+  const list = inStage.filter(visible).sort(cmp), lim = S.limit[s.key] || 80;
+  const add = S.canWrite && s.add ? `<button type="button" class="btn sm primary" data-new="${s.key}">+ ${esc(s.add)}</button>` : "";
+  const filtered = list.length !== inStage.length ? ` · showing ${list.length}` : "";
+  let body;
+  if (!inStage.length) body = `<div class="empty"><span>${esc(emptyText(s.key))}</span>${add}</div>`;
+  else if (!list.length) body = `<div class="empty"><span>No deals here match the search.</span></div>`;
+  else body = `<div class="list">${list.slice(0, lim).map(rowHTML).join("")}</div>` +
+    (list.length > lim ? `<div class="more"><button type="button" class="btn" data-more="${s.key}">Show ${list.length - lim} more</button></div>` : "");
+  $("#bands").innerHTML = `<section class="band" data-stage="${s.key}"><div class="page-h"><h2>${esc(s.title)}</h2>
+    <span class="meta">${inStage.length ? `${inStage.length} · ${esc(totalsText(inStage))}${filtered} · ` : ""}${esc(s.sub)}</span><span style="flex:1"></span>${inStage.length?add:""}</div>${body}</section>`;
+}
+function goTab(k) {
+  if (!TABS.includes(k)) k = "home";
+  S.tab = k; if (k !== "home") S.fl = ""; saveUI();
+  try { history.replaceState(null, "", k === "home" ? location.pathname : `#${k}`); } catch (e) {}
+  render(); window.scrollTo({top: 0});
 }
 function emptyText(k) {
   return {inquiry:"No pending inquiries. Add one when a salesman sends a price request.", offer:"No pending offers.", signed:"No signed offers waiting for the mill.",
@@ -1035,7 +1074,7 @@ function openEdit(id) {
 document.addEventListener("click", e => {
   const fl = e.target.closest("a[data-flink]");
   if (fl && (!fileURL(fl.dataset.flink))) { e.preventDefault(); S.files.sign([fl.dataset.flink]).then(() => { const u = fileURL(fl.dataset.flink); if (u) location.href = u; else toast("Couldn't open the file. Check the connection."); }); return; }
-  const t = e.target.closest("[data-act],[data-open],[data-new],[data-tog],[data-jump],[data-f],[data-more],[data-fsave],[data-fdel]"); if (!t) return;
+  const t = e.target.closest("[data-act],[data-open],[data-new],[data-tog],[data-jump],[data-tab],[data-f],[data-more],[data-fsave],[data-fdel]"); if (!t) return;
   if (t.dataset.fsave) { const f = findFile(t.dataset.scope, t.dataset.owner, t.dataset.fsave); if (f) saveFile(f); return; }
   if (t.dataset.fdel) {
     if (t.dataset.armed !== "1") { t.dataset.armed = "1"; t.textContent = "Tap to confirm"; t.style.color = "var(--red)"; setTimeout(() => { if (t.isConnected) { t.dataset.armed = ""; t.textContent = "Remove"; t.style.color = ""; } }, 4000); return; }
@@ -1046,9 +1085,9 @@ document.addEventListener("click", e => {
   if (t.dataset.new) return openNew(t.dataset.new);
   if (t.dataset.tog) { S.collapsed[t.dataset.tog] = !S.collapsed[t.dataset.tog]; saveUI(); return render(); }
   if (t.dataset.more) { S.limit[t.dataset.more] = 9999; return render(); }
-  if (t.dataset.jump) { const k = t.dataset.jump; if (k === "closed" && !S.showClosed) { S.showClosed = true; $("#fc").checked = true; }
-    if (S.collapsed[k]) { S.collapsed[k] = false; saveUI(); } render(); const el = document.getElementById(`b-${k}`); if (el) el.scrollIntoView({behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"}); return; }
-  if ("f" in t.dataset) { S.fl = S.fl === t.dataset.f ? "" : t.dataset.f; if (S.fl) Object.keys(S.collapsed).forEach(k => S.collapsed[k] = false); return render(); }
+  if (t.dataset.jump) return goTab(t.dataset.jump);
+  if (t.dataset.tab) return goTab(t.dataset.tab);
+  if ("f" in t.dataset) { S.fl = S.fl === t.dataset.f ? "" : t.dataset.f; return render(); }
 });
 document.addEventListener("change", e => {
   const t = e.target;
@@ -1058,7 +1097,6 @@ document.addEventListener("change", e => {
 let qT = null;
 $("#q").addEventListener("input", e => { clearTimeout(qT); qT = setTimeout(() => { S.q = e.target.value.trim().toLowerCase(); render(); }, 120); });
 $("#fs").addEventListener("change", e => { S.fs = e.target.value; render(); });
-$("#fc").addEventListener("change", e => { S.showClosed = e.target.checked; render(); });
 
 /* ------------------------------------------------------------------ settings */
 function renderSettings() {
