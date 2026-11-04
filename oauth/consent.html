@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Connect to HIPCO Deals</title>
+<meta name="theme-color" content="#1F4283">
+<link rel="icon" href="../icons/icon-192.png">
+<style>
+:root{--bg:#F3F7FD;--surface:#fff;--ink:#0B1A3F;--muted:#55627F;--line:#DCE5F2;--brand:#1F4283;--sky:#EAF2FD;--red:#B42335;--green:#1E7A46;
+  --f:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 var(--f);min-height:100vh;display:grid;place-items:center;padding:16px}
+.card{width:min(420px,100%);background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:0 6px 24px rgba(11,26,63,.08);padding:26px 22px;display:flex;flex-direction:column;gap:14px}
+img{height:48px;width:auto;align-self:flex-start}
+h1{margin:0;font-size:24px;color:var(--brand)}
+p{margin:0;color:var(--muted);font-size:14px}
+.who{background:var(--sky);border-radius:10px;padding:12px 14px;font-size:14px}
+.who b{color:var(--ink)}
+ul{margin:0;padding-left:18px;color:var(--ink);font-size:14px}
+label{display:block;font-size:13px;font-weight:600;margin-bottom:4px}
+input{width:100%;font:16px var(--f);padding:10px 12px;border:1px solid var(--line);border-radius:8px}
+.row{display:flex;gap:10px}
+button{flex:1;font:600 15px var(--f);padding:11px 14px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+button.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+button:disabled{opacity:.6}
+.err{color:var(--red);font-size:13px;min-height:1em}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main class="card">
+  <img src="../icons/logo.png" alt="HIPCO, Hammoud International Paper SAL">
+  <h1>Connect Claude</h1>
+  <p id="msg">Loading…</p>
+
+  <form id="signin" hidden novalidate>
+    <div><label for="e">Email</label><input id="e" type="email" autocomplete="username" inputmode="email" required></div>
+    <div style="margin-top:10px"><label for="pw">Password</label><input id="pw" type="password" autocomplete="current-password" required></div>
+    <div class="err" id="serr"></div>
+    <div class="row"><button type="submit" class="primary" id="sbtn">Sign in</button></div>
+  </form>
+
+  <section id="ask" hidden>
+    <div class="who" id="who"></div>
+    <p style="margin-top:12px">If you allow it, this Claude can, as you:</p>
+    <ul>
+      <li>read every deal in Beirut and Offshore</li>
+      <li>add inquiries, offers and orders</li>
+      <li>update deals and move them to the next step</li>
+      <li>give you links to attach documents</li>
+    </ul>
+    <p style="margin-top:12px">Every change is saved under your name and the team is notified. You can remove this access any time.</p>
+    <div class="err" id="aerr"></div>
+    <div class="row"><button type="button" id="deny">Don't allow</button><button type="button" class="primary" id="allow">Allow</button></div>
+  </section>
+</main>
+<script src="../config.js"></script>
+<script src="../vendor/supabase.js"></script>
+<script>
+(async () => {
+  "use strict";
+  const $ = s => document.querySelector(s);
+  const CFG = window.HIPCO_CONFIG || {};
+  const sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, {auth: {persistSession: true, autoRefreshToken: true, storageKey: "hipco-deals-auth"}});
+  const id = new URLSearchParams(location.search).get("authorization_id");
+  const say = t => { $("#msg").textContent = t; };
+  if (!id) { say("This page opens by itself when you connect Claude to HIPCO Deals. Nothing to do here."); return; }
+
+  async function showRequest() {
+    $("#signin").hidden = true;
+    const {data, error} = await sb.auth.oauth.getAuthorizationDetails(id);
+    if (error) { say("This connection request has expired or is not valid. Start the connection again from Claude."); return; }
+    if (data && !data.authorization_id && data.redirect_url) { location.assign(data.redirect_url); return; }   // already allowed before
+    const {data: u} = await sb.auth.getUser();
+    const app = (data.client && (data.client.client_name || data.client.client_id)) || "An app";
+    say("An app is asking to use HIPCO Deals for you.");
+    $("#who").innerHTML = "";
+    const b1 = document.createElement("b"); b1.textContent = app;
+    const b2 = document.createElement("b"); b2.textContent = (u && u.user && u.user.email) || "";
+    $("#who").append(b1, document.createTextNode(" wants to connect to HIPCO Deals as "), b2, document.createTextNode("."));
+    $("#ask").hidden = false;
+  }
+  async function decide(approve) {
+    $("#allow").disabled = $("#deny").disabled = true; $("#aerr").textContent = "";
+    const r = approve ? await sb.auth.oauth.approveAuthorization(id, {skipBrowserRedirect: true}) : await sb.auth.oauth.denyAuthorization(id, {skipBrowserRedirect: true});
+    if (r.error || !r.data || !r.data.redirect_url) { $("#aerr").textContent = "Couldn't finish. Check the connection and try again."; $("#allow").disabled = $("#deny").disabled = false; return; }
+    say(approve ? "Connected. Going back to Claude…" : "Not connected. Going back…"); $("#ask").hidden = true;
+    location.assign(r.data.redirect_url);
+  }
+  $("#allow").addEventListener("click", () => decide(true));
+  $("#deny").addEventListener("click", () => decide(false));
+  $("#signin").addEventListener("submit", async e => {
+    e.preventDefault(); $("#serr").textContent = ""; $("#sbtn").disabled = true; $("#sbtn").textContent = "Signing in…";
+    const {error} = await sb.auth.signInWithPassword({email: $("#e").value.trim(), password: $("#pw").value});
+    $("#sbtn").disabled = false; $("#sbtn").textContent = "Sign in";
+    if (error) { $("#serr").textContent = /invalid/i.test(error.message) ? "Wrong email or password." : error.message; return; }
+    showRequest();
+  });
+
+  const {data: {session}} = await sb.auth.getSession();
+  if (session) showRequest();
+  else { say("Sign in with your HIPCO Deals email and password to connect Claude."); $("#signin").hidden = false; setTimeout(() => $("#e").focus(), 50); }
+})();
+</script>
+</body>
+</html>

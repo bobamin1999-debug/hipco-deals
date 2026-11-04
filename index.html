@@ -247,6 +247,8 @@ button.st:hover{border-color:var(--brand);color:var(--brand);background:var(--sk
 .v-notes{white-space:pre-wrap;font-size:13px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:0}
 
 /* overview */
+.att-point{outline:3px solid var(--amber);outline-offset:2px;animation:attp 1s ease-in-out 3}
+@keyframes attp{50%{outline-color:transparent}}
 .ov{display:flex;flex-direction:column;gap:14px}
 .ov-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
 .ov-card > h3{margin:0;padding:12px 16px;font-family:var(--f-display);font-size:21px;color:var(--brand);border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px}
@@ -452,7 +454,9 @@ const TABS = ["home","inquiry","offer","signed","order","closed"];
 /* phone back button: business chooser is the root; then Overview {b}, a tab {t}, an open deal {m}.
    "back" closes the deal, then returns to Overview, then to the chooser. */
 S.tab = "home"; S.biz = null;
-let OPEN_DEAL = new URLSearchParams(location.search).get("deal");   // from a tapped notification
+const QS = new URLSearchParams(location.search);
+let OPEN_DEAL = QS.get("deal") || QS.get("upload");   // from a tapped notification, or an upload link from Lama's Claude
+let OPEN_CAT = QS.get("upload") ? (QS.get("cat") || "other") : null;
 try { history.replaceState(null, "", location.pathname); } catch (e) {}
 const kindOf = d => d.kind === "offshore" ? "offshore" : "local";
 const BIZ_NAME = {local:"Beirut", offshore:"Offshore"};
@@ -1156,7 +1160,6 @@ function openNew(stage) {
       closeModal(); toast(`${v.ref || v.client} added`, () => queued(id, () => ref(id).delete()));
     }});
 }
-function openDeal(id) { showView(id); }
 function openEdit(id) {
   const d = S.deals.get(id); if (!d) return;
   const stageSel = `<div class="fld"><label for="f-_stage">Stage</label><select id="f-_stage">${STAGES.map(s => `<option value="${s.key}" ${s.key===d.stage?"selected":""}>${esc(s.title)}</option>`).join("")}</select><span class="hint">Use the step buttons normally. Change this only to correct a mistake.</span></div>`;
@@ -1287,7 +1290,16 @@ $("#bell").addEventListener("click", enableAlerts);
 function openDeal(id) {
   const d = S.deals.get(id); if (!d) return false;
   if (S.biz !== kindOf(d)) chooseBiz(kindOf(d));
-  showView(id); return true;
+  showView(id);
+  if (OPEN_CAT) { const cat = OPEN_CAT; OPEN_CAT = null; setTimeout(() => pointAttach(cat), 400); }
+  return true;
+}
+/* upload link: scroll to the right "+ Attach" button on the deal and make it stand out */
+function pointAttach(cat) {
+  const inp = $("#m-body").querySelector(`input[data-up="deal"][data-cat="${cat}"]`) || $("#m-body").querySelector(`input[data-up="deal"][data-cat="other"]`);
+  if (!inp) { toast(S.canWrite ? "Open the deal's documents to attach the file." : "Only an editor can attach files."); return; }
+  const lab = inp.closest("label"); lab.classList.add("att-point"); lab.scrollIntoView({block: "center", behavior: "smooth"});
+  toast(`Tap the highlighted button to attach the ${CAT_NAME[cat] || "file"}.`);
 }
 if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", e => { if (e.data && e.data.openDeal) { if (!openDeal(e.data.openDeal)) OPEN_DEAL = e.data.openDeal; } });
 

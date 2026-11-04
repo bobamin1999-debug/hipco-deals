@@ -58,3 +58,15 @@ Keep *Authentication → Sign In / Providers → Allow new users to sign up* swi
 - How: database trigger on `kv` → Edge Function `notify` (`supabase/functions/notify/index.ts`) → Web Push (free, no outside service).
   Keys: `VAPID_PUBLIC` is in `config.js`; `VAPID_PRIVATE` and `NOTIFY_SECRET` are Edge Function secrets in Supabase only.
 - iPhone: alerts only work in the installed app (Add to Home Screen), iOS 16.4 or newer.
+
+## Claude connector (for Lama's Claude)
+
+- Edge Function `hipco-mcp` (`supabase/functions/hipco-mcp/index.ts`) is an MCP server. Add
+  `https://lkgvghqvtkbqrovfohqe.supabase.co/functions/v1/hipco-mcp` in Claude → Settings → Connectors → Add custom connector.
+- Sign-in uses Supabase's OAuth 2.1 server; the approval screen is `oauth/consent.html` in this app. Each person connects with their own login,
+  and every query runs as them, so the database rules apply (editors change, viewers read).
+- Tools: find_deals, get_deal, create_deal, update_deal, record_step, attach_link. Claude can't upload files itself; `attach_link`
+  gives a link (`?upload=<deal>&cat=<type>`) that opens the deal on the right "+ Attach" button.
+- Supabase settings it needs: Authentication → OAuth Server on, dynamic client registration on, authorization path `/oauth/consent`;
+  Site URL `https://bobamin1999-debug.github.io/hipco-deals`; asymmetric JWT signing key (ES256, already on); function `hipco-mcp` with
+  "Verify JWT" off (the function checks the login itself).
