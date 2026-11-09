@@ -273,7 +273,7 @@ button.st:hover{border-color:var(--brand);color:var(--brand);background:var(--sk
 @media (max-width:520px){.todo{flex-direction:column}.t-side{flex-direction:row;align-items:center;justify-content:space-between}}
 .more-week{margin:16px 0 0} .closed-box{margin-top:16px} .closed-box summary{cursor:pointer;color:var(--muted);font-weight:600;padding:8px 0}
 .t-cm{display:block;margin-top:4px;font-size:13px;color:var(--ink);background:var(--sky);border-radius:8px;padding:5px 8px} .t-cm small{color:var(--muted)}
-.fu{color:var(--violet)} .tag{font-size:11px;border:1px solid var(--line);border-radius:999px;padding:1px 7px;color:var(--muted)}
+.fu{color:var(--violet)} .tag.ok{color:var(--green);border-color:var(--green)} .tag{font-size:11px;border:1px solid var(--line);border-radius:999px;padding:1px 7px;color:var(--muted)}
 .cms{display:flex;flex-direction:column;gap:8px} .cm{background:var(--sky);border-radius:10px;padding:8px 12px} .cm p{margin:0;font-size:14px;white-space:pre-wrap} .cm small{color:var(--muted);font-size:11.5px}
 .cm-add{display:flex;gap:8px;align-items:flex-end;margin-top:8px} .cm-add textarea{flex:1;font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;resize:vertical}
 .ov{display:flex;flex-direction:column;gap:14px}
@@ -831,7 +831,8 @@ function render() {
   const TAB_LBL = {home:"Today", week:"This week", offers:"Offers", clients:"Clients", deals:"All deals"};
   const urgent = st => open.filter(d => (st ? d.stage === st : true) && d._a.level === 1).length;
   $("#tabs").innerHTML = TABS.map(k => {
-    const n = k === "home" ? open.filter(d => d._a.level === 1).length : k === "week" ? open.filter(d => d._a.level === 2 || d._a.level === 3).length : k === "offers" ? open.filter(d => d.stage === "offer").length : k === "clients" ? new Set(open.filter(d => d.stage !== "offer").map(d => clientKey(d.client))).size : open.filter(d => d.stage !== "offer").length;
+    const nonOffer = open.filter(d => d.stage !== "offer");
+    const n = k === "home" ? nonOffer.filter(d => d._a.level === 1).length : k === "week" ? nonOffer.filter(d => d._a.level === 2 || d._a.level === 3).length : k === "offers" ? open.filter(d => d.stage === "offer").length : k === "clients" ? new Set(open.filter(d => d.stage !== "offer").map(d => clientKey(d.client))).size : open.filter(d => d.stage !== "offer").length;
     const u = 0;
     return `<button type="button" data-tab="${k}" ${S.tab===k?'aria-current="page"':""}><b>${n}</b><span class="tl">${TAB_LBL[k]}${u?` <span class="dotn">${u}</span>`:""}</span></button>`;
   }).join("");
@@ -899,7 +900,7 @@ function offersHTML(list) {
     const btn = S.canWrite ? `<button type="button" class="btn sm primary" data-act="signed" data-id="${esc(d._id)}">Client signed →</button><button type="button" class="btn sm ghost" data-act="lost" data-id="${esc(d._id)}">Lost</button>` : "";
     return `<article class="todo ${d._a.level > 0 ? `l${d._a.level}` : "l0"}">
       <button type="button" class="todo-main" data-open="${esc(d._id)}">
-        <span class="t-top"><b>${esc(d.client)}</b><span class="mono">${esc(d.ref || "")}</span>${d.salesman ? `<span class="tag">${esc(d.salesman)}</span>` : ""}</span>
+        <span class="t-top"><b>${esc(d.client)}</b><span class="mono">${esc(d.ref || "")}</span>${d.salesman ? `<span class="tag">${esc(d.salesman)}</span>` : ""}${d.offerStatus ? `<span class="tag ${/signed/i.test(d.offerStatus) && !/to be/i.test(d.offerStatus) ? "ok" : ""}">${esc(d.offerStatus)}</span>` : ""}</span>
         <span class="t-do">${esc(d.product || "")}${qty ? ` · ${esc(qty)}` : ""}</span>
         <span class="t-sub">${esc([d.dest, d.supplier ? `Supplier: ${d.supplier}` : "", d.margin ? `Margin ${d.margin}` : ""].filter(Boolean).join(" · "))}</span>
         <span class="t-sub">Sent ${esc(fD(d.offerDate))}${n != null ? ` · ${n} day${n === 1 ? "" : "s"} ago` : ""}${d._a.level === 3 ? " · <b class=\"fu\">follow up</b>" : ""}</span>
@@ -908,10 +909,11 @@ function offersHTML(list) {
       <div class="t-side"><span class="t-amt">${esc(price)}</span><small>offer price</small>${btn}</div>
     </article>`;
   };
-  return `<div class="page-h"><h2>Pending offers</h2><span class="meta">${list.length} sent, waiting for the client · follow up after ${S.cfg.followDays} days</span><span style="flex:1"></span>${add}</div>
+  return `<div class="page-h"><h2>Pending offers</h2><span class="meta">${list.length} offers from the pending-offers sheet · kept separate from the client statement</span><span style="flex:1"></span>${add}</div>
     ${list.length ? `<div class="todos">${list.map(card).join("").replace(/&lt;b class=&quot;fu&quot;&gt;follow up&lt;\/b&gt;/g, '<b class="fu">follow up</b>')}</div>` : `<div class="empty"><span>No pending offers.</span>${add}</div>`}`;
 }
 function todayHTML(open) {
+  open = open.filter(d => d.stage !== "offer");
   const urgent = open.filter(d => d._a.level === 1).sort(todoSort), week = open.filter(d => d._a.level === 2 || d._a.level === 3);
   const now = ymNow(), dueNow = open.reduce((x, d) => x + dueIn(d, now), 0), late = open.reduce((x, d) => x + duesBefore(d, now), 0);
   const tiles = `<div class="sumtiles">
@@ -925,6 +927,7 @@ function todayHTML(open) {
     ${week.length ? `<p class="more-week"><button type="button" class="btn" data-tab="week">See the ${week.length} reminder${week.length === 1 ? "" : "s"} for this week →</button></p>` : ""}`;
 }
 function weekHTML(open) {
+  open = open.filter(d => d.stage !== "offer");
   const week = open.filter(d => d._a.level === 2 || d._a.level === 3).sort(todoSort);
   const arriving = open.filter(d => d._a.level === 0 && !isArrived(d) && dn(d.eta) != null && dn(d.eta) - T() <= 7 && dn(d.eta) >= T());
   return `<div class="page-h"><h2>This week</h2><span class="meta">reminders to send and payments to follow up</span></div>
