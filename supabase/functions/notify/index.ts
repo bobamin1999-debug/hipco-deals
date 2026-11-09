@@ -77,8 +77,8 @@ function assess(d: Deal, c: any): { level: number; label: string; hint?: string 
   if (now > 0) return { level: 2, label: "Payment due this month", hint: `${money(now)} in ${fM(ymNow())}` };
   if (!sh && e != null && e - t <= c.blWarnDays) return { level: 2, label: "No B/L yet, ETA close", hint: `${e - t} days to ETA` };
   if (!sh && ms != null && t >= ms) return { level: 2, label: "Ship month. Not shipped yet", hint: `Offer said ${fM(d.shipMonth)}` };
-  // a PI counts as signed only when the signed PI is attached (Bob, 09.11.2026)
-  if (!(Array.isArray(d.files) ? d.files : []).some((f: any) => f.cat === "pi")) return { level: 2, label: "Mill PI not signed", hint: d.millOrder ? `Order ${d.millOrder} · signed PI not attached` : "Signed PI not attached" };
+  // a PI counts as signed when the signed PI is attached, or once there is a B/L / shipment (Bob, 09.11.2026)
+  if (!(Array.isArray(d.files) ? d.files : []).some((f: any) => f.cat === "pi") && !sh && !ar) return { level: 2, label: "Mill PI not signed", hint: d.millOrder ? `Order ${d.millOrder} · signed PI not attached` : "Signed PI not attached" };
   return { level: 0, label: "On track" };
 }
 
