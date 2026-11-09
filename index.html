@@ -272,6 +272,10 @@ button.st:hover{border-color:var(--brand);color:var(--brand);background:var(--sk
 .t-amt{font-weight:700;font-size:15px} .t-side small{font-size:11px;color:var(--muted)}
 @media (max-width:520px){.todo{flex-direction:column}.t-side{flex-direction:row;align-items:center;justify-content:space-between}}
 .more-week{margin:16px 0 0} .closed-box{margin-top:16px} .closed-box summary{cursor:pointer;color:var(--muted);font-weight:600;padding:8px 0}
+.t-cm{display:block;margin-top:4px;font-size:13px;color:var(--ink);background:var(--sky);border-radius:8px;padding:5px 8px} .t-cm small{color:var(--muted)}
+.fu{color:var(--violet)} .tag{font-size:11px;border:1px solid var(--line);border-radius:999px;padding:1px 7px;color:var(--muted)}
+.cms{display:flex;flex-direction:column;gap:8px} .cm{background:var(--sky);border-radius:10px;padding:8px 12px} .cm p{margin:0;font-size:14px;white-space:pre-wrap} .cm small{color:var(--muted);font-size:11.5px}
+.cm-add{display:flex;gap:8px;align-items:flex-end;margin-top:8px} .cm-add textarea{flex:1;font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;resize:vertical}
 .ov{display:flex;flex-direction:column;gap:14px}
 .ov-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
 .ov-card > h3{margin:0;padding:12px 16px;font-family:var(--f-display);font-size:21px;color:var(--brand);border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px}
@@ -447,6 +451,7 @@ img{max-width:100%}
 "use strict";
 /* ------------------------------------------------------------------ constants */
 const STAGES = [
+  {key:"offer",   title:"Pending offers", short:"Offers", sub:"sent, waiting for the client"},
   {key:"signed",  title:"Signed, waiting for the mill", short:"Signed", sub:"client signed, mill not confirmed yet"},
   {key:"order",   title:"Orders",            short:"Orders", add:"New order", sub:"deposit · shipment · arrival · payment"},
   {key:"closed",  title:"Closed",            short:"Closed", sub:"paid or lost"}
@@ -455,7 +460,7 @@ const DEFAULTS = {remindDays:14, dueRemindDays:7, followDays:7, inquiryDays:3, b
   salesmen:["Ahmad","Ali","Mohamad","Nadine","Ouseili","Soha","Wissam"]};
 /* attachment categories, in the order a deal produces them */
 const CATS = [
-  ["signed","Signed contract"], ["pi","Mill PI (signed)"],
+  ["offer","Offer sent"], ["signed","Signed contract"], ["pi","Mill PI (signed)"],
   ["deposit","Deposit proof"], ["shipping","B/L & shipping docs"], ["invoice","Invoice"], ["payment","Final payment proof"], ["other","Other"]
 ];
 const CAT_NAME = Object.fromEntries(CATS);
@@ -470,7 +475,7 @@ const CLIP = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-
 const S = {db:null, files:null, assets:null, downloads:null, canWrite:false, loaded:false, deals:new Map(), clients:new Map(), cfg:{...DEFAULTS},
   q:"", fs:"", fl:"", tab:"home", collapsed:{}, limit:{}, openId:null, busy:{}};
 try { const c = JSON.parse(localStorage.getItem("hipco-deals-ui")||"{}"); S.collapsed = c.collapsed||{}; S.installHidden = !!c.installHidden; S.tab = c.tab || "home"; } catch(e) {}
-const TABS = ["home","week","clients","deals"];   // focus: reminders (inquiries & offers dropped, Nov 2026)
+const TABS = ["home","week","offers","clients","deals"];   // focus: reminders (inquiries dropped, Nov 2026)
 /* phone back button: business chooser is the root; then Overview {b}, a tab {t}, an open deal {m}.
    "back" closes the deal, then returns to Overview, then to the chooser. */
 S.tab = "home"; S.biz = null;
@@ -527,7 +532,7 @@ const needsDeposit = d => num(d.advPct) > 0 && !d.depositOn && !(num(d.paid) > 0
 /* money owed: "paid" = received so far, "balance" = still owed, "dues" = {"2026-11": amount, ...} from the client statement */
 const ymNow = () => todayISO().slice(0, 7);
 const paidOf = d => isFinite(num(d.paid)) ? num(d.paid) : 0;
-const balanceOf = d => d.stage === "closed" ? 0 : isFinite(num(d.balance)) ? num(d.balance) : Math.max(0, value(d) - paidOf(d));
+const balanceOf = d => d.stage === "closed" || d.stage === "offer" ? 0 : isFinite(num(d.balance)) ? num(d.balance) : Math.max(0, value(d) - paidOf(d));
 const duesOf = d => Object.entries(d.dues && typeof d.dues === "object" ? d.dues : {}).filter(([m, v]) => /^\d{4}-\d{2}$/.test(m) && num(v) > 0).map(([m, v]) => [m, num(v)]).sort((a, b) => a[0] < b[0] ? -1 : 1);
 const duesBefore = (d, ym) => duesOf(d).filter(([m]) => m < ym).reduce((s, [, v]) => s + v, 0);
 const dueIn = (d, ym) => duesOf(d).filter(([m]) => m === ym).reduce((s, [, v]) => s + v, 0);
@@ -613,6 +618,7 @@ const F = {
   paidOn:{l:"Paid in full on",t:"date"}, mayCancel:{l:"May cancel (from En Cours)",t:"check"},
   clientCode:{l:"Client account no.",t:"text"}, priceNote:{l:"Price note (range, EUR…)",t:"text"}, etaNote:{l:"ETA if no exact date (e.g. JAN, TBC)",t:"text"},
   blNote:{l:"B/L note",t:"text"}, lot:{l:"Lot",t:"text"},
+  margin:{l:"Margin (from costing)",t:"text",w:1}, purchaseNote:{l:"Supplier price note",t:"text"}, qtyNote:{l:"Quantity note",t:"text"},
   paid:{l:"Paid so far",t:"num"}, balance:{l:"Balance still owed",t:"num"}, dues:{l:"Dues by month",t:"dues",w:1},
   payAmt:{l:"Amount received",t:"num",req:1}, payOn:{l:"Received on",t:"date"},
   notes:{l:"Notes",t:"area",w:1}, lostReason:{l:"Why was it lost? (optional)",t:"text",w:1},
@@ -623,6 +629,8 @@ const F = {
 };
 const today = () => todayISO();
 const ACTIONS = {
+  signed:{title:"Client signed the offer", sub:"It moves to Signed, waiting for the mill.", ok:"Mark signed",
+    fields:["signedOn","file:signed"], defs:()=>({signedOn:today()}), apply:v=>({...v,stage:"signed"}), done:d=>`${d.ref} signed`},
   mill:{title:"Mill confirmed the order", sub:"Mill signed our PI. It becomes an order.", ok:"Make it an order",
     fields:["millOrder","millRef","piOn","eta","shipMonth","file:pi"], defs:()=>({piOn:today()}), req:["millOrder"],
     apply:v=>({...v,stage:"order"}), done:d=>`${d.ref} is now an order`},
@@ -638,13 +646,17 @@ const ACTIONS = {
     apply:(v,d)=>({...v,stage:"closed",outcome:"lost",closedOn:today(),prevStage:d.stage}), done:d=>`${d.ref||d.client} marked lost`}
 };
 const NEW = {
+  offer:{title:"New offer", sub:"An offer sent to a client, waiting for an answer.",
+    fields:["ref","offerDate","client","salesman","dest","product","qty","qtyNote","cur","price","priceNote","supplier","purchase","margin","notes","file:offer"],
+    defs:()=>({offerDate:today(),cur:"USD"}), req:["ref","client"], make:v=>({...v,stage:"offer",kind:"offshore"})},
   order:{title:"New order", sub:"A signed client order (F or H number).",
     fields:["ref","client","clientCode","dest","supplier","product","qty","cur","price","total","terms","advPct","balDays","dues","signedOn","millRef","eta","etaNote","notes","file:signed","file:pi"],
     defs:()=>({cur:"USD"}), req:["ref","client"], make:v=>({...v,stage:"order",kind:"offshore",millOrder:v.millOrder||v.ref})}
 };
 const EDIT_GROUPS = [
   ["Deal",["client","clientCode","contact","product","spec","qty","qtyType","dest","lot"]],
-  ["Order and terms",["ref","cur","price","priceNote","total","terms","advPct","balDays","shipMonth","signedOn"]],
+  ["Order and terms",["ref","offerDate","cur","price","priceNote","total","terms","advPct","balDays","shipMonth","signedOn"]],
+  ["Supplier and margin",["supplier","purchase","purchaseNote","margin","salesman"]],
   ["Mill & order",["millOrder","millRef","piOn","supplier","purchase","profit","port","mayCancel"]],
   ["Payments",["paid","balance","dues","depositOn","balanceDue","paidOn"]],
   ["Shipment",["shippedOn","bl","blNote","eta","etaNote","arrivedOn"]],
@@ -757,6 +769,7 @@ function actHTML(d) {
   if (!S.canWrite) return "";
   const id = esc(d._id), b = (act, txt, cls="") => `<button type="button" class="btn sm ${cls}" data-act="${act}" data-id="${id}">${txt}</button>`;
   switch (d.stage) {
+    case "offer":   return b("signed","Client signed →","primary") + b("lost","Lost","ghost");
     case "signed":  return b("mill","Mill confirmed →","primary") + (needsDeposit(d) ? b("deposit","Deposit paid") : "") + b("pay","Payment received") + b("lost","Cancel","ghost");
     case "order": {
       const next = needsDeposit(d) ? ["deposit","Deposit paid"] : !isShipped(d) ? ["shipped","Shipped →"] : !isArrived(d) ? ["arrived","Arrived →"] : ["paid","Paid in full →"];
@@ -815,24 +828,26 @@ function render() {
   $("#attn").innerHTML = `<span class="lbl">Needs attention</span>` + chip("1","l1","Urgent",cnt(1)) + chip("2","l2","This week",cnt(2)) +
     chip("3","l3","Sales follow-up",cnt(3)) + chip("arr","l4","Arriving in 30 days",arr) +
     (S.fl ? `<button type="button" class="btn ghost sm" data-f="">Show all</button>` : "");
-  const TAB_LBL = {home:"Today", week:"This week", clients:"Clients", deals:"All deals"};
+  const TAB_LBL = {home:"Today", week:"This week", offers:"Offers", clients:"Clients", deals:"All deals"};
   const urgent = st => open.filter(d => (st ? d.stage === st : true) && d._a.level === 1).length;
   $("#tabs").innerHTML = TABS.map(k => {
-    const n = k === "home" ? open.filter(d => d._a.level === 1).length : k === "week" ? open.filter(d => d._a.level === 2 || d._a.level === 3).length : k === "clients" ? new Set(open.map(d => clientKey(d.client))).size : open.length;
+    const n = k === "home" ? open.filter(d => d._a.level === 1).length : k === "week" ? open.filter(d => d._a.level === 2 || d._a.level === 3).length : k === "offers" ? open.filter(d => d.stage === "offer").length : k === "clients" ? new Set(open.filter(d => d.stage !== "offer").map(d => clientKey(d.client))).size : open.filter(d => d.stage !== "offer").length;
     const u = 0;
     return `<button type="button" data-tab="${k}" ${S.tab===k?'aria-current="page"':""}><b>${n}</b><span class="tl">${TAB_LBL[k]}${u?` <span class="dotn">${u}</span>`:""}</span></button>`;
   }).join("");
   $("#pipe").hidden = true; $("#attn").hidden = true; $("#tools").hidden = S.tab !== "deals";
   if (S.tab === "home") { $("#bands").innerHTML = todayHTML(open); return; }
   if (S.tab === "week") { $("#bands").innerHTML = weekHTML(open); return; }
-  if (S.tab === "clients") { $("#bands").innerHTML = clientsHTML(open); return; }
-  const list = open.filter(visible).sort(cmp), lim = S.limit.deals || 80, closed = all.filter(d => d.stage === "closed").sort(cmp);
+  if (S.tab === "offers") { $("#bands").innerHTML = offersHTML(open.filter(d => d.stage === "offer")); return; }
+  if (S.tab === "clients") { $("#bands").innerHTML = clientsHTML(open.filter(d => d.stage !== "offer")); return; }
+  const deals = open.filter(d => d.stage !== "offer");
+  const list = deals.filter(visible).sort(cmp), lim = S.limit.deals || 80, closed = all.filter(d => d.stage === "closed").sort(cmp);
   const add = S.canWrite ? `<button type="button" class="btn sm primary" data-new="order">+ New order</button>` : "";
-  let body = !open.length ? `<div class="empty"><span>No open deals.</span>${add}</div>` : !list.length ? `<div class="empty"><span>No deals match the search.</span></div>`
+  let body = !deals.length ? `<div class="empty"><span>No open deals.</span>${add}</div>` : !list.length ? `<div class="empty"><span>No deals match the search.</span></div>`
     : `<div class="list">${list.slice(0, lim).map(rowHTML).join("")}</div>` + (list.length > lim ? `<div class="more"><button type="button" class="btn" data-more="deals">Show ${list.length - lim} more</button></div>` : "");
   if (closed.length) body += `<details class="closed-box"><summary>Closed deals (${closed.length}): paid or lost</summary><div class="list">${closed.map(rowHTML).join("")}</div></details>`;
   $("#bands").innerHTML = `<section class="band" data-stage="deals"><div class="page-h"><h2>All deals</h2>
-    <span class="meta">${open.length} open · ${esc(usd(open.reduce((x, d) => x + balanceOf(d), 0)))} still owed</span><span style="flex:1"></span>${add}</div>${body}</section>`;
+    <span class="meta">${deals.length} open · ${esc(usd(deals.reduce((x, d) => x + balanceOf(d), 0)))} still owed</span><span style="flex:1"></span>${add}</div>${body}</section>`;
 }
 /* ------------------------------------------------------------------ reminders: what to do, in words */
 function todoText(d) {
@@ -849,12 +864,14 @@ function todoText(d) {
     case "Remind client to pay": return `Remind the client to pay ${bal}`;
     case "Payment due this month": return `Follow up the ${money(now)} due this month`;
     case "May cancel. Decide": return "Decide: keep or cancel this order";
+    case "No reply yet, follow up": case "Expired, follow up": return "Follow up the offer with the client";
     default: return a.label;
   }
 }
 function todoRow(d) {
   const a = d._a, lv = a.level > 0 ? `l${a.level}` : "l0";
-  const pay = !S.canWrite ? "" : d.stage === "signed" ? `<button type="button" class="btn sm primary" data-act="mill" data-id="${esc(d._id)}">Mill confirmed →</button>`
+  const pay = !S.canWrite ? "" : d.stage === "offer" ? `<button type="button" class="btn sm primary" data-act="signed" data-id="${esc(d._id)}">Client signed →</button>`
+    : d.stage === "signed" ? `<button type="button" class="btn sm primary" data-act="mill" data-id="${esc(d._id)}">Mill confirmed →</button>`
     : d._a.label === "Deposit not paid" ? `<button type="button" class="btn sm primary" data-act="pay" data-id="${esc(d._id)}">Deposit received</button>`
     : balanceOf(d) > 0 ? `<button type="button" class="btn sm" data-act="pay" data-id="${esc(d._id)}">Payment received</button>` : "";
   const eta = d.eta ? `ETA ${fD(d.eta)}` : d.etaNote ? `ETA ${d.etaNote}` : "";
@@ -863,11 +880,37 @@ function todoRow(d) {
       <span class="t-top"><b>${esc(d.client)}</b><span class="mono">${esc(d.ref || "")}</span></span>
       <span class="t-do">${esc(todoText(d))}</span>
       <span class="t-sub">${esc([d.product, isFinite(num(d.qty)) ? `${mt(num(d.qty))} MT` : "", eta, a.hint].filter(Boolean).join(" · "))}</span>
+      ${lastComment(d)}
     </button>
-    <div class="t-side"><span class="t-amt">${esc(usd(balanceOf(d)))}</span><small>still owed</small>${pay}</div>
+    <div class="t-side">${d.stage === "offer" ? `<span class="t-amt">${esc(d.price != null ? `$${d.price}/MT` : d.priceNote || "")}</span><small>offer price</small>` : `<span class="t-amt">${esc(usd(balanceOf(d)))}</span><small>still owed</small>`}${pay}</div>
   </article>`;
 }
 const todoSort = (a, b) => balanceOf(b) - balanceOf(a);
+const commentsOf = d => Array.isArray(d.comments) ? d.comments : [];
+function lastComment(d) { const c = commentsOf(d).slice(-1)[0]; return c ? `<span class="t-cm">💬 ${esc(c.text)} <small>${esc(fD(c.on))}</small></span>` : ""; }
+/* pending offers: one card each, newest first */
+function offersHTML(list) {
+  const days = d => d.offerDate ? T() - dn(d.offerDate) : null;
+  list.sort((a, b) => (b.offerDate || "").localeCompare(a.offerDate || ""));
+  const add = S.canWrite ? `<button type="button" class="btn sm primary" data-new="offer">+ New offer</button>` : "";
+  const card = d => {
+    const n = days(d), price = d.price != null ? `$${d.price}/MT` : (d.priceNote || "");
+    const qty = isFinite(num(d.qty)) ? `${mt(num(d.qty))} MT` : (d.qtyNote || "");
+    const btn = S.canWrite ? `<button type="button" class="btn sm primary" data-act="signed" data-id="${esc(d._id)}">Client signed →</button><button type="button" class="btn sm ghost" data-act="lost" data-id="${esc(d._id)}">Lost</button>` : "";
+    return `<article class="todo ${d._a.level > 0 ? `l${d._a.level}` : "l0"}">
+      <button type="button" class="todo-main" data-open="${esc(d._id)}">
+        <span class="t-top"><b>${esc(d.client)}</b><span class="mono">${esc(d.ref || "")}</span>${d.salesman ? `<span class="tag">${esc(d.salesman)}</span>` : ""}</span>
+        <span class="t-do">${esc(d.product || "")}${qty ? ` · ${esc(qty)}` : ""}</span>
+        <span class="t-sub">${esc([d.dest, d.supplier ? `Supplier: ${d.supplier}` : "", d.margin ? `Margin ${d.margin}` : ""].filter(Boolean).join(" · "))}</span>
+        <span class="t-sub">Sent ${esc(fD(d.offerDate))}${n != null ? ` · ${n} day${n === 1 ? "" : "s"} ago` : ""}${d._a.level === 3 ? " · <b class=\"fu\">follow up</b>" : ""}</span>
+        ${lastComment(d)}
+      </button>
+      <div class="t-side"><span class="t-amt">${esc(price)}</span><small>offer price</small>${btn}</div>
+    </article>`;
+  };
+  return `<div class="page-h"><h2>Pending offers</h2><span class="meta">${list.length} sent, waiting for the client · follow up after ${S.cfg.followDays} days</span><span style="flex:1"></span>${add}</div>
+    ${list.length ? `<div class="todos">${list.map(card).join("").replace(/&lt;b class=&quot;fu&quot;&gt;follow up&lt;\/b&gt;/g, '<b class="fu">follow up</b>')}</div>` : `<div class="empty"><span>No pending offers.</span>${add}</div>`}`;
+}
 function todayHTML(open) {
   const urgent = open.filter(d => d._a.level === 1).sort(todoSort), week = open.filter(d => d._a.level === 2 || d._a.level === 3);
   const now = ymNow(), dueNow = open.reduce((x, d) => x + dueIn(d, now), 0), late = open.reduce((x, d) => x + duesBefore(d, now), 0);
@@ -992,7 +1035,7 @@ function groupHTML(title, files, scope, ownerId, cat) {
     ${busyLine(scope, ownerId, cat)}</div>`;
 }
 const STEPS = [
-  {k:"signed",  t:"Client signed the contract", cat:"signed", when:[]},
+  {k:"signed",  t:"Client signed the contract", cat:"signed", act:"signed", when:["offer"], btn:"Client signed →"},
   {k:"pi",      t:"Mill confirmed · PI signed", cat:"pi", act:"mill", when:["signed"], btn:"Mill confirmed →"},
   {k:"deposit", t:"Deposit received", cat:"deposit", act:"deposit", when:["signed","order"], btn:"Deposit paid"},
   {k:"shipped", t:"Shipped", cat:"shipping", act:"shipped", when:["order"], btn:"Mark shipped"},
@@ -1088,10 +1131,14 @@ function viewHTML(d) {
       ${duesCard(d)}
       ${kvCard("Client", [["Client", d.client], ["Account no.", d.clientCode], ["Contact", d.contact], ["Delivery / port", d.dest || d.port]])}
       ${kvCard("Product", [["Product", d.product], ["GSM / size", d.spec], ["Quantity", qty], ["Price / MT", d.price != null && d.price !== "" ? `${d.cur === "EUR" ? "€" : "$"}${d.price}` : d.priceNote || ""], ["Price note", d.price != null && d.price !== "" ? d.priceNote : ""], ["Lot", d.lot], ["Value", money(v, d.cur)], ["Purchase / MT", d.purchase != null ? `${d.cur === "EUR" ? "€" : "$"}${d.purchase}` : ""], ["Profit", isFinite(num(d.profit)) ? `${money(num(d.profit), d.cur)} (${margin})` : ""]])}
-      ${kvCard("Order and terms", [["Order no.", d.ref], ["Contract signed", fD(d.signedOn)], ["Payment terms", d.terms], ["Advance", adv > 0 ? `${Math.round(adv*100)}% = ${money(v*adv, d.cur)}` : ""], ["Shipment month", fM(d.shipMonth)]])}
+      ${kvCard("Order and terms", [["Order / offer no.", d.ref], ["Offer date", fD(d.offerDate)], ["Contract signed", fD(d.signedOn)], ["Salesman", d.salesman], ["Payment terms", d.terms], ["Advance", adv > 0 ? `${Math.round(adv*100)}% = ${money(v*adv, d.cur)}` : ""], ["Shipment month", fM(d.shipMonth)]])}
+      ${kvCard("Supplier and margin", [["Supplier", d.supplier], ["Supplier price / MT", d.purchase != null ? `$${d.purchase}` : d.purchaseNote], ["Supplier price note", d.purchase != null ? d.purchaseNote : ""], ["Margin", d.margin], ["Quantity note", d.qtyNote]])}
       ${kvCard("Mill and shipping", [["Mill order", d.millOrder], ["Mill PI no.", d.millRef], ["PI signed on", fD(d.piOn)], ["Mill / supplier", d.supplier], ["B/L", d.bl || d.blNote], ["B/L note", d.bl ? d.blNote : ""], ["ETA", d.eta ? fD(d.eta) : d.etaNote], ["Shipped on", fD(d.shippedOn)], ["Arrived on", fD(d.arrivedOn)]])}
       ${kvCard("Payments", [["Deposit received", fD(d.depositOn)], ["Balance", adv > 0 ? money(v*(1-adv), d.cur) : ""], ["Balance due", due != null ? fDn(due) : ""], ["Remind client on", !d.paidOn && rem != null ? fDn(rem) : ""], ["Paid in full", fD(d.paidOn)]])}
     </div>
+    <h4 class="v-h">Comments</h4>
+    <div class="cms">${commentsOf(d).slice().reverse().map(c => `<div class="cm"><p>${esc(c.text)}</p><small>${esc(fD(c.on))}${c.by ? ` · ${esc(String(c.by).split("@")[0])}` : ""}</small></div>`).join("") || `<p class="note" style="margin:0">No comments yet.</p>`}</div>
+    ${S.canWrite ? `<div class="cm-add"><textarea id="cm-text" rows="2" placeholder="Add a comment: what happened, who to follow up with…"></textarea><button type="button" class="btn sm primary" data-cmadd="${esc(d._id)}">Add comment</button></div>` : ""}
     ${d.notes ? `<h4 class="v-h">Notes</h4><p class="v-notes">${esc(d.notes)}</p>` : ""}
   </div>`;
 }
@@ -1212,6 +1259,14 @@ function openModal({title, sub, ok, html, onSubmit, onDelete, onCancel, dealId, 
 function hideModal() { $("#scrim").hidden = true; MODAL = null; S.openId = null; S.openMode = null; }
 function closeModal() { const was = !$("#scrim").hidden; hideModal(); if (was && history.state && history.state.m) { S.navSkip = true; try { history.back(); } catch (e) { S.navSkip = false; } } }
 $("#m-back").addEventListener("click", () => closeModal());
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-cmadd]"); if (!b) return;
+  const id = b.dataset.cmadd, d = S.deals.get(id), box = $("#cm-text"), text = box ? box.value.trim() : "";
+  if (!d || !text) { if (box) box.focus(); return; }
+  b.disabled = true;
+  try { await patch(id, {comments: [...commentsOf(d), {on: today(), by: S.me || "", text}]}); box.value = ""; toast("Comment added"); }
+  catch (err) { writeFail(err); } finally { b.disabled = false; }
+});
 $("#bizsw").addEventListener("click", () => { const st = history.state || {}; if (st.b) { try { history.go(st.t ? -2 : -1); return; } catch (e) {} } showChooser(); });
 window.addEventListener("popstate", () => {
   if (S.navSkip) {                       // our own history.back(); a deal may have been reopened meanwhile
@@ -1362,13 +1417,13 @@ function renderSettings() {
   const box = $("#setbox"); box.hidden = !S.canWrite; if (!S.canWrite) return;
   const c = S.cfg, f = (id, label, v) => `<div class="fld"><label for="${id}">${esc(label)}</label><input type="number" min="0" id="${id}" value="${esc(v)}"></div>`;
   $("#setform").innerHTML = f("s-rem","Remind client: days before arrival",c.remindDays) + f("s-due","Balance due after arrival: remind days before",c.dueRemindDays) +
-    f("s-bl","Warn 'no B/L' when ETA within (days)",c.blWarnDays) +
+    f("s-bl","Warn 'no B/L' when ETA within (days)",c.blWarnDays) + f("s-fol","Follow up an offer after (days)",c.followDays) +
     `<div><button type="submit" class="btn primary sm">Save settings</button></div>`;
 }
 $("#setform").addEventListener("submit", async e => {
   e.preventDefault();
   const n = id => { const x = Number(document.getElementById(id).value); return isFinite(x) && x >= 0 ? x : 0; };
-  const next = {...S.cfg, remindDays:n("s-rem"), dueRemindDays:n("s-due"), blWarnDays:n("s-bl")};
+  const next = {...S.cfg, remindDays:n("s-rem"), dueRemindDays:n("s-due"), blWarnDays:n("s-bl"), followDays:n("s-fol")};
   try { await queued("_cfg", () => S.db.doc("config/settings").set(next)); toast("Settings saved"); } catch (err) { writeFail(err); }
 });
 
@@ -1388,7 +1443,8 @@ async function exportExcel() {
       "Ship month": fM(d.shipMonth), "Signed on": fD(d.signedOn), "Mill order": d.millOrder || "",
       "Mill PI no.": d.millRef || "", "PI signed on": fD(d.piOn), "Deposit on": fD(d.depositOn), "Shipped on": fD(d.shippedOn), "B/L": d.bl || d.blNote || "", "ETA": d.eta ? fD(d.eta) : (d.etaNote || ""), "Destination": d.dest || "",
       "Arrived on": fD(d.arrivedOn), "Balance due": fDn(balanceDue(d)), "Paid on": fD(d.paidOn), "Port": d.port || "", "Profit": d.profit ?? "",
-      "Attachments": filesOf(d).map(f => `${CAT_NAME[f.cat]||"Other"}: ${f.name}`).join("; "), "Notes": d.notes || "" }));
+      "Supplier": d.supplier || "", "Supplier price": d.purchase ?? (d.purchaseNote || ""), "Margin": d.margin || "",
+      "Attachments": filesOf(d).map(f => `${CAT_NAME[f.cat]||"Other"}: ${f.name}`).join("; "), "Comments": commentsOf(d).map(c => `${fD(c.on)}: ${c.text}`).join(" | "), "Notes": d.notes || "" }));
     const ws = X.utils.json_to_sheet(rows), wb = X.utils.book_new();
     ws["!cols"] = Object.keys(rows[0] || {}).map(k => ({wch: Math.min(40, Math.max(8, k.length + 2, ...rows.slice(0,200).map(r => String(r[k]).length)))}));
     X.utils.book_append_sheet(wb, ws, "Deals");
@@ -1484,7 +1540,8 @@ async function start(u) {
   S.canWrite = await B.user.canEdit();
   $("#login").hidden = true; $("#biz").hidden = true; $("#app").hidden = false;
   S.biz = "offshore"; S.tab = "home";   // HIPCO tracks only the offshore business here (Beirut business dropped, Nov 2026)
-  $("#acct").textContent = `Signed in as ${B.user.email() || u.email}`;
+  S.me = B.user.email() || u.email;
+  $("#acct").textContent = `Signed in as ${S.me}`;
   setMode(); renderSettings(); showInstall(); setBell();
   const b = $("#xl"); b.hidden = false; b.onclick = exportExcel;
   B.onStatus(st => { const el = $("#sync"); el.className = "sync" + (!st.online || st.pending ? " off" : "");

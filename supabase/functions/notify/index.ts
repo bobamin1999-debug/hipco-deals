@@ -82,7 +82,7 @@ function assess(d: Deal, c: any): { level: number; label: string; hint?: string 
 
 /* ---------------------------------------------------------------- what changed, in words */
 const BIZ = (d: Deal) => d.kind === "offshore" ? "Offshore" : "Beirut";
-const head = (d: Deal) => `${BIZ(d)} · ${d.ref || (d.inqNo ? `Inq #${d.inqNo}` : "Inquiry")} · ${d.client || ""}`.trim();
+const head = (d: Deal) => `${d.ref || (d.inqNo ? `Inq #${d.inqNo}` : "Inquiry")} · ${d.client || ""}`.trim();
 const CAT: Record<string, string> = { inquiry: "Inquiry", offer: "Offer", signed: "Signed offer", pi: "Mill PI", deposit: "Deposit proof",
   shipping: "B/L / shipping docs", invoice: "Invoice", payment: "Payment proof", other: "Document" };
 const FIELD: Record<string, string> = { client: "client", contact: "contact", salesman: "salesman", product: "product", spec: "spec", qty: "quantity",
@@ -90,9 +90,10 @@ const FIELD: Record<string, string> = { client: "client", contact: "contact", sa
   shipMonth: "shipment month", validUntil: "validity", millOrder: "mill order", millRef: "mill PI no.", bl: "B/L no.", eta: "ETA",
   notes: "notes", dest: "destination", port: "port", supplier: "supplier", purchase: "purchase price", profit: "profit", ref: "reference",
   kind: "business", offerDate: "offer date", inqDate: "inquiry date", mayCancel: "may-cancel flag", dues: "dues by month", balance: "balance",
-  clientCode: "account no.", priceNote: "price note", etaNote: "ETA", blNote: "B/L note", lot: "lot" };
+  clientCode: "account no.", priceNote: "price note", etaNote: "ETA", blNote: "B/L note", lot: "lot",
+  margin: "margin", purchaseNote: "supplier price", qtyNote: "quantity note" };
 const SKIP = new Set(["files", "stage", "outcome", "prevStage", "closedOn", "signedOn", "piOn", "depositOn", "shipped", "shippedOn", "arrived",
-  "arrivedOn", "paidOn", "updatedAt", "updatedBy", "inqStatus", "paid", "payments"]);
+  "arrivedOn", "paidOn", "updatedAt", "updatedBy", "inqStatus", "paid", "payments", "comments"]);
 const url = (id: string) => `${APP_URL}?deal=${encodeURIComponent(id)}`;
 
 function dealChange(op: string, id: string, o: Deal | null, n: Deal | null): Msg | null {
@@ -118,6 +119,8 @@ function dealChange(op: string, id: string, o: Deal | null, n: Deal | null): Msg
   if (isFinite(got) && got > 0) out.push(`Payment received: ${money(got)}${isFinite(num(n.balance)) ? ` · balance ${num(n.balance) > 0 ? money(num(n.balance)) : "$0"}` : ""}`);
   else if (n.paidOn && !o.paidOn && !(n.stage === "closed" && o.stage !== "closed")) out.push("Payment received");
   if (n.millRef && n.millRef !== o.millRef) out.push(`Mill PI no. ${n.millRef}`);
+  const oc = Array.isArray(o.comments) ? o.comments.length : 0, nc = Array.isArray(n.comments) ? n.comments : [];
+  for (const c of nc.slice(oc)) out.push(`Comment: ${c.text}`);
   const of = new Map((Array.isArray(o.files) ? o.files : []).map((f: any) => [f.id, f]));
   const nf = new Map((Array.isArray(n.files) ? n.files : []).map((f: any) => [f.id, f]));
   for (const [k, f] of nf) if (!of.has(k)) out.push(`New document: ${CAT[(f as any).cat] || "Document"} (${(f as any).name})`);
