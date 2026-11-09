@@ -276,6 +276,15 @@ button.st:hover{border-color:var(--brand);color:var(--brand);background:var(--sk
 .fu{color:var(--violet)} .tag.ok{color:var(--green);border-color:var(--green)} .tag{font-size:11px;border:1px solid var(--line);border-radius:999px;padding:1px 7px;color:var(--muted)}
 .cms{display:flex;flex-direction:column;gap:8px} .cm{background:var(--sky);border-radius:10px;padding:8px 12px} .cm p{margin:0;font-size:14px;white-space:pre-wrap} .cm small{color:var(--muted);font-size:11.5px}
 .cm-add{display:flex;gap:8px;align-items:flex-end;margin-top:8px} .cm-add textarea{flex:1;font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;resize:vertical}
+.sf{display:flex;flex-direction:column;gap:12px;margin:4px 0 14px}
+.sf-group h5{margin:0 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.sf-chips{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px}
+.sf-chip{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface);box-shadow:var(--shadow);cursor:pointer;font:inherit;text-align:left;color:var(--ink)}
+.sf-chip .sf-l{flex:1;font-weight:600;font-size:14px} .sf-chip b{font-family:var(--f-display);font-size:22px;color:var(--brand)}
+.sf-chip .dot{width:12px;height:12px;border-radius:50%;flex:0 0 12px}
+.sf-chip.on{border-color:var(--brand);background:var(--sky);outline:2px solid var(--brand)} .sf-chip.zero{opacity:.55}
+.sf-on{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:var(--sky);border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:14px}
+@media (max-width:520px){.sf-chips{grid-template-columns:1fr 1fr}.sf-chip{padding:10px}.sf-chip .sf-l{font-size:13px}}
 .ov{display:flex;flex-direction:column;gap:14px}
 .ov-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
 .ov-card > h3{margin:0;padding:12px 16px;font-family:var(--f-display);font-size:21px;color:var(--brand);border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px}
@@ -295,7 +304,7 @@ button.st:hover{border-color:var(--brand);color:var(--brand);background:var(--sk
 .ov-row .c{font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ov-row .h{grid-column:2 / 4;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ov-row .chip{font-size:11.5px;padding:2px 7px}
-.dot.l1{background:var(--red)} .dot.l2{background:var(--amber)} .dot.l3{background:var(--violet)} .dot.l4{background:var(--brand)}
+.dot.l1{background:var(--red)} .dot.l2{background:var(--amber)} .dot.l3{background:var(--violet)} .dot.l4{background:var(--brand)} .dot.l0{background:var(--green)}
 .ov-empty{padding:12px 16px;color:var(--muted);font-size:13px}
 
 /* pages (tabs) */
@@ -828,7 +837,7 @@ function render() {
   $("#attn").innerHTML = `<span class="lbl">Needs attention</span>` + chip("1","l1","Urgent",cnt(1)) + chip("2","l2","This week",cnt(2)) +
     chip("3","l3","Sales follow-up",cnt(3)) + chip("arr","l4","Arriving in 30 days",arr) +
     (S.fl ? `<button type="button" class="btn ghost sm" data-f="">Show all</button>` : "");
-  const TAB_LBL = {home:"Today", week:"This week", offers:"Offers", clients:"Clients", deals:"All deals"};
+  const TAB_LBL = {home:"Today", week:"This week", offers:"Offers", clients:"Clients", deals:"Shipments"};
   const urgent = st => open.filter(d => (st ? d.stage === st : true) && d._a.level === 1).length;
   $("#tabs").innerHTML = TABS.map(k => {
     const nonOffer = open.filter(d => d.stage !== "offer");
@@ -841,15 +850,54 @@ function render() {
   if (S.tab === "week") { $("#bands").innerHTML = weekHTML(open); return; }
   if (S.tab === "offers") { $("#bands").innerHTML = offersHTML(open.filter(d => d.stage === "offer")); return; }
   if (S.tab === "clients") { $("#bands").innerHTML = clientsHTML(open.filter(d => d.stage !== "offer")); return; }
-  const deals = open.filter(d => d.stage !== "offer");
-  const list = deals.filter(visible).sort(cmp), lim = S.limit.deals || 80, closed = all.filter(d => d.stage === "closed").sort(cmp);
-  const add = S.canWrite ? `<button type="button" class="btn sm primary" data-new="order">+ New order</button>` : "";
-  let body = !deals.length ? `<div class="empty"><span>No open deals.</span>${add}</div>` : !list.length ? `<div class="empty"><span>No deals match the search.</span></div>`
-    : `<div class="list">${list.slice(0, lim).map(rowHTML).join("")}</div>` + (list.length > lim ? `<div class="more"><button type="button" class="btn" data-more="deals">Show ${list.length - lim} more</button></div>` : "");
-  if (closed.length) body += `<details class="closed-box"><summary>Closed deals (${closed.length}): paid or lost</summary><div class="list">${closed.map(rowHTML).join("")}</div></details>`;
-  $("#bands").innerHTML = `<section class="band" data-stage="deals"><div class="page-h"><h2>All deals</h2>
-    <span class="meta">${deals.length} open · ${esc(usd(deals.reduce((x, d) => x + balanceOf(d), 0)))} still owed</span><span style="flex:1"></span>${add}</div>${body}</section>`;
+  $("#bands").innerHTML = shipmentsHTML(open.filter(d => d.stage !== "offer"), all.filter(d => d.stage === "closed"));
 }
+/* ------------------------------------------------------------------ shipments: nearest arrival first, with filters */
+const MONTH_IX = {JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
+/* expected arrival as a day number: the exact ETA, or a best estimate from notes like "JAN", "END JAN", "14 & 21 NOV", "NOV/DEC" */
+function arrivalDay(d) {
+  const e = dn(d.eta); if (e != null) return e;
+  const t = String(d.etaNote || "").toUpperCase(), m = t.match(/JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC/);
+  if (!m) return null;
+  const mi = MONTH_IX[m[0]], now = new Date(todayISO() + "T00:00:00Z"), y0 = now.getUTCFullYear(), ym = t.match(/20\d\d/);
+  const y = ym ? Number(ym[0]) : (mi < now.getUTCMonth() - 1 ? y0 + 1 : y0);
+  const last = new Date(Date.UTC(y, mi + 1, 0)).getUTCDate(), dd = t.match(/\b(\d{1,2})\b/);
+  const day = /END/.test(t) ? last : dd ? Math.min(Number(dd[1]), last) : 15;
+  return Date.UTC(y, mi, day) / 864e5;
+}
+const isLate = d => d.stage !== "closed" && !isShipped(d) && (["Shipment late", "ETA passed. Not shipped?"].includes(d._a.label) || (arrivalDay(d) != null && arrivalDay(d) < T()));
+const SHIP_FILTERS = [
+  ["Shipping", [
+    ["late", "Late: not shipped yet", "l1", isLate],
+    ["mill", "Waiting for mill PI", "l1", d => d.stage === "signed"],
+    ["noship", "Not shipped yet (no B/L)", "l4", d => d.stage === "order" && !isShipped(d)],
+    ["onway", "On the way (shipped)", "l0", d => isShipped(d) && !isArrived(d)],
+    ["soon", "Arriving in 30 days", "l2", d => !isArrived(d) && arrivalDay(d) != null && arrivalDay(d) - T() <= 30 && arrivalDay(d) >= T()],
+    ["arrived", "Arrived", "l0", d => isArrived(d)]]],
+  ["Payments", [
+    ["overdue", "Payments overdue", "l1", d => ["Payment overdue", "Balance overdue", "Arrived. Client not paid"].includes(d._a.label) || duesBefore(d, ymNow()) > 0],
+    ["deposit", "Deposit not received", "l1", d => needsDeposit(d)],
+    ["duenow", "Due this month", "l2", d => dueIn(d, ymNow()) > 0],
+    ["nosched", "Balance not scheduled yet", "l4", d => balanceOf(d) - duesOf(d).reduce((x, [, v]) => x + v, 0) > 1]]]
+];
+const SF = Object.fromEntries(SHIP_FILTERS.flatMap(([, l]) => l.map(f => [f[0], f])));
+function shipmentsHTML(deals, closed) {
+  const byArrival = (a, b) => (arrivalDay(a) ?? 1e9) - (arrivalDay(b) ?? 1e9) || cmp(a, b);
+  const f = SF[S.sf], shown = deals.filter(visible).filter(d => !f || f[3](d)).sort(byArrival), lim = S.limit.deals || 80;
+  const add = S.canWrite ? `<button type="button" class="btn sm primary" data-new="order">+ New order</button>` : "";
+  const groups = SHIP_FILTERS.map(([title, list]) => `<div class="sf-group"><h5>${esc(title)}</h5><div class="sf-chips">${list.map(([k, label, dot, test]) => {
+    const n = deals.filter(test).length;
+    return `<button type="button" class="sf-chip ${S.sf === k ? "on" : ""} ${n ? "" : "zero"}" data-sf="${k}"><span class="dot ${dot}"></span><span class="sf-l">${esc(label)}</span><b>${n}</b></button>`;
+  }).join("")}</div></div>`).join("");
+  const head = f ? `<div class="sf-on"><span>Showing: <b>${esc(f[1])}</b> · ${shown.length}</span><button type="button" class="btn sm" data-sf="">Show all shipments</button></div>` : "";
+  let body = !deals.length ? `<div class="empty"><span>No open shipments.</span>${add}</div>` : !shown.length ? `<div class="empty"><span>Nothing here right now.</span></div>`
+    : `<div class="list">${shown.slice(0, lim).map(rowHTML).join("")}</div>` + (shown.length > lim ? `<div class="more"><button type="button" class="btn" data-more="deals">Show ${shown.length - lim} more</button></div>` : "");
+  if (closed.length && !f) body += `<details class="closed-box"><summary>Closed (${closed.length}): paid or cancelled</summary><div class="list">${closed.sort(cmp).map(rowHTML).join("")}</div></details>`;
+  return `<section class="band" data-stage="deals"><div class="page-h"><h2>Shipments</h2>
+    <span class="meta">${deals.length} open · nearest arrival first · ${esc(usd(deals.reduce((x, d) => x + balanceOf(d), 0)))} still owed</span><span style="flex:1"></span>${add}</div>
+    <div class="sf">${groups}</div>${head}${body}</section>`;
+}
+document.addEventListener("click", e => { const b = e.target.closest("[data-sf]"); if (!b) return; S.sf = S.sf === b.dataset.sf ? "" : b.dataset.sf; render(); const h = document.querySelector(".sf-on") || document.querySelector("#bands .list"); if (h && S.sf) h.scrollIntoView({block: "start", behavior: "smooth"}); });
 /* ------------------------------------------------------------------ reminders: what to do, in words */
 function todoText(d) {
   const a = d._a, bal = usd(balanceOf(d)), now = dueIn(d, ymNow());
