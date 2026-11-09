@@ -1,7 +1,7 @@
 # HIPCO Deals
 
 HIPCO's deal tracker as a phone app (installs from the browser with "Add to Home Screen").
-Offshore business only (the Beirut business was dropped in Nov 2026). Every deal moves: **Pending inquiries → Pending offers → Signed offers → Orders → Closed**.
+Offshore business only (Beirut business, inquiries and offers dropped in Nov 2026). The app is built around reminders: **Today · This week · Clients · All deals**.
 Tap a deal to see its progress, documents and details. Built and operated by Claude for Bob (Ibrahim Amin).
 
 ## How it works

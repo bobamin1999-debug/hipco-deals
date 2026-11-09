@@ -57,7 +57,6 @@ function missingDocs(d: Deal) {
 }
 
 const STEPS = {
-  offer_sent:     { stage: "offer",  date: "offerDate", need: ["ref"], say: "moved to Pending offers" },
   client_signed:  { stage: "signed", date: "signedOn",  need: [], say: "marked as signed by the client", doc: "signed" },
   mill_confirmed: { stage: "order",  date: "piOn",      need: ["millOrder"], say: "is now an order (mill confirmed)", doc: "pi" },
   deposit_received: { date: "depositOn", need: [], say: "deposit recorded", doc: "deposit" },
@@ -67,8 +66,8 @@ const STEPS = {
   lost:           { stage: "closed", date: "closedOn", need: [], say: "marked lost", extra: { outcome: "lost" } },
 } as Record<string, { stage?: string; date: string; need: string[]; say: string; doc?: string; extra?: Record<string, unknown> }>;
 
-const INSTRUCTIONS = `HIPCO Deals is HIPCO's live deal tracker (paper & board trading, Beirut). Two separate businesses: "beirut" (local offers, refs like "HIP 26xxx") and "offshore" (orders F26xx, and inquiries).
-A deal moves: inquiry -> offer -> signed (client signed, waiting for mill) -> order (mill signed our PI) -> closed (paid or lost). Orders then get deposit, shipped (B/L, ETA), arrived, paid in full.
+const INSTRUCTIONS = `HIPCO Deals tracks HIPCO's offshore deals (paper & board trading, Beirut): orders F26xx (from mills) and H26xx (from HIPCO stock), per client, with what each client paid, owes and when (dues by month).
+A deal moves: signed (client signed, waiting for the mill) -> order (mill confirmed) -> deposit, shipped (B/L, ETA), arrived, payments -> closed (paid or lost).
 Rules: never guess data; only write what the document or the user states. Dates are YYYY-MM-DD, shipment month YYYY-MM, advance % as a fraction (0.3).
 Always find the deal first (find_deals / get_deal) and confirm you have the right one before changing it; if two deals could match, ask.
 Use record_step for progress (it sets the stage and date like the app's buttons), update_deal for corrections and extra details.
@@ -130,18 +129,17 @@ function buildServer(sb: any) {
 
   server.registerTool("create_deal", {
     title: "Add a deal",
-    description: "Add a new inquiry, offer or order to the Beirut or Offshore business. Check with find_deals first that it isn't already there.",
-    inputSchema: z.object({ business: z.enum(["beirut", "offshore"]), stage: z.enum(["inquiry", "offer", "order"]), fields: FieldsSchema }),
+    description: "Add a new offshore deal (client signed, or an order with an F/H number). Check with find_deals first that it isn't already there.",
+    inputSchema: z.object({ stage: z.enum(["signed", "order"]).describe("signed = client signed, mill not confirmed yet; order = has an F/H order no."), fields: FieldsSchema }),
     annotations: { destructiveHint: false },
-  }, async ({ business, stage, fields }) => {
+  }, async ({ stage, fields }) => {
+    const business = "offshore";
     if (!fields.client) return fail("A client name is required.");
-    if (stage !== "inquiry" && !fields.ref) return fail("An offer or order needs its ref / order no.");
+    if (!fields.ref) return fail("A deal needs its order no. or offer ref.");
     const base = String(fields.ref || `INQ-${Date.now().toString(36)}`).trim().replace(/\s+/g, "-").replace(/[^A-Za-z0-9_\-.~:@+]/g, "") || `D-${Date.now().toString(36)}`;
     const ids = new Set((await all()).map(r => r.id));
     let id = base, i = 2; while (ids.has(id)) id = `${base}-${i++}`;
     const data: Deal = { ...fields, stage, kind: business === "offshore" ? "offshore" : "local", createdAt: Date.now(), updatedAt: Date.now(), source: "claude" };
-    if (stage === "inquiry" && !data.inqDate) data.inqDate = today();
-    if (stage === "offer" && !data.offerDate) data.offerDate = today();
     if (stage === "order" && !data.millOrder) data.millOrder = data.ref;
     const { error } = await sb.from("kv").insert({ col: "deals", id, data });
     if (error) return fail(/row-level|permission|42501/i.test(error.message) ? "Your login can view deals but not change them." : error.message);

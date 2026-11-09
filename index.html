@@ -408,16 +408,15 @@ img{max-width:100%}
 
   <div class="tools" id="tools">
     <input type="search" id="q" placeholder="Search client, ref, product, B/L…" aria-label="Search deals">
-    <select id="fs" aria-label="Salesman"><option value="">All salesmen</option></select>
   </div>
 
   <main id="bands"><div class="status" id="status">Loading deals…</div></main>
 
   <footer class="foot">
-    <p class="note">Red = urgent · amber = this week · purple = sales follow-up · green = on track. Tap any deal to open it: progress, documents and every detail.</p>
+    <p class="note">Red = do today · amber = this week · green = on track. Tap any deal to open it: payments, shipping, documents and every detail.</p>
     <div class="acct"><span id="acct"></span><span class="sync" id="sync"></span><span style="flex:1"></span><button type="button" class="btn sm ghost" id="signout">Sign out</button></div>
     <details class="settings" id="setbox" hidden>
-      <summary>Settings: reminder days and salesmen</summary>
+      <summary>Settings: reminder days</summary>
       <form id="setform" class="set-grid"></form>
     </details>
   </footer>
@@ -448,9 +447,7 @@ img{max-width:100%}
 "use strict";
 /* ------------------------------------------------------------------ constants */
 const STAGES = [
-  {key:"inquiry", title:"Pending inquiries", short:"Inquiries", add:"New inquiry", sub:"from the salesmen"},
-  {key:"offer",   title:"Pending offers",    short:"Pending offers", add:"New offer", sub:"sent, waiting for the client"},
-  {key:"signed",  title:"Signed offers",     short:"Signed", sub:"client signed, waiting for the mill"},
+  {key:"signed",  title:"Signed, waiting for the mill", short:"Signed", sub:"client signed, mill not confirmed yet"},
   {key:"order",   title:"Orders",            short:"Orders", add:"New order", sub:"deposit · shipment · arrival · payment"},
   {key:"closed",  title:"Closed",            short:"Closed", sub:"paid or lost"}
 ];
@@ -458,7 +455,7 @@ const DEFAULTS = {remindDays:14, dueRemindDays:7, followDays:7, inquiryDays:3, b
   salesmen:["Ahmad","Ali","Mohamad","Nadine","Ouseili","Soha","Wissam"]};
 /* attachment categories, in the order a deal produces them */
 const CATS = [
-  ["inquiry","Inquiry / client request"], ["offer","Offer sent"], ["signed","Signed offer"], ["pi","Mill PI (signed)"],
+  ["signed","Signed contract"], ["pi","Mill PI (signed)"],
   ["deposit","Deposit proof"], ["shipping","B/L & shipping docs"], ["invoice","Invoice"], ["payment","Final payment proof"], ["other","Other"]
 ];
 const CAT_NAME = Object.fromEntries(CATS);
@@ -603,7 +600,7 @@ const F = {
   inqDate:{l:"Inquiry date",t:"date"}, product:{l:"Product / quality",t:"text",w:1}, spec:{l:"GSM / size",t:"text"},
   qty:{l:"Qty (MT)",t:"num"}, qtyType:{l:"Qty type",t:"select",o:[["Firm","Firm"],["Min","Minimum"],["Container","Container"]]},
   dest:{l:"Delivery / port",t:"text"}, port:{l:"Port",t:"text"},
-  ref:{l:"Offer ref / order no.",t:"text",ph:"HIP 26124"}, offerDate:{l:"Offer date",t:"date"},
+  ref:{l:"Order no.",t:"text",ph:"F2650"}, offerDate:{l:"Offer date",t:"date"},
   cur:{l:"Currency",t:"select",o:[["USD","USD"],["EUR","EUR"]]}, price:{l:"Price / MT",t:"amt"},
   total:{l:"Total",t:"num",h:"Leave empty to use qty × price"}, terms:{l:"Payment terms",t:"area",w:1},
   advPct:{l:"Advance %",t:"pct"}, balDays:{l:"Balance due: days before arrival",t:"num",h:"Empty if paid from invoice, on shipment or after arrival"},
@@ -620,18 +617,12 @@ const F = {
   payAmt:{l:"Amount received",t:"num",req:1}, payOn:{l:"Received on",t:"date"},
   notes:{l:"Notes",t:"area",w:1}, lostReason:{l:"Why was it lost? (optional)",t:"text",w:1},
   "file:inquiry":{l:"Attach the inquiry (optional)",t:"file",cat:"inquiry"}, "file:offer":{l:"Attach the offer you sent",t:"file",cat:"offer"},
-  "file:signed":{l:"Attach the signed offer",t:"file",cat:"signed"}, "file:pi":{l:"Attach the signed mill PI",t:"file",cat:"pi"},
+  "file:signed":{l:"Attach the signed contract",t:"file",cat:"signed"}, "file:pi":{l:"Attach the signed mill PI",t:"file",cat:"pi"},
   "file:deposit":{l:"Attach the deposit proof",t:"file",cat:"deposit"}, "file:shipping":{l:"Attach the B/L or shipping docs",t:"file",cat:"shipping"},
   "file:payment":{l:"Attach the payment proof",t:"file",cat:"payment"}
 };
 const today = () => todayISO();
 const ACTIONS = {
-  makeOffer:{title:"Make it an offer", sub:"Fill in what you sent the client. It moves to Pending offers.", ok:"Move to offers",
-    fields:["ref","offerDate","salesman","product","spec","qty","qtyType","cur","price","total","terms","advPct","balDays","shipMonth","validUntil","file:offer"],
-    defs:d=>({ref:d.ref||"",offerDate:today(),cur:d.cur||"USD",qtyType:d.qtyType||"Firm"}), req:["ref","price"],
-    apply:v=>({...v,stage:"offer"}), done:d=>`${d.ref||d.client} moved to Pending offers`},
-  signed:{title:"Client signed the offer", sub:"It moves to Signed offers, waiting for the mill.", ok:"Mark signed",
-    fields:["signedOn","salesman","file:signed"], defs:()=>({signedOn:today()}), apply:v=>({...v,stage:"signed"}), done:d=>`${d.ref} signed`},
   mill:{title:"Mill confirmed the order", sub:"Mill signed our PI. It becomes an order.", ok:"Make it an order",
     fields:["millOrder","millRef","piOn","eta","shipMonth","file:pi"], defs:()=>({piOn:today()}), req:["millOrder"],
     apply:v=>({...v,stage:"order"}), done:d=>`${d.ref} is now an order`},
@@ -647,19 +638,13 @@ const ACTIONS = {
     apply:(v,d)=>({...v,stage:"closed",outcome:"lost",closedOn:today(),prevStage:d.stage}), done:d=>`${d.ref||d.client} marked lost`}
 };
 const NEW = {
-  inquiry:{title:"New inquiry", sub:"A request from a salesman. Make it an offer when you send prices.",
-    fields:["inqDate","salesman","client","contact","product","spec","qty","dest","notes","file:inquiry"], defs:()=>({inqDate:today()}), req:["client"],
-    make:v=>({...v,stage:"inquiry",kind:"offshore"})},
-  offer:{title:"New offer", sub:"An offer sent without an inquiry row.",
-    fields:["ref","offerDate","client","contact","salesman","product","spec","qty","qtyType","cur","price","total","terms","advPct","balDays","shipMonth","validUntil","notes","file:offer"],
-    defs:()=>({offerDate:today(),cur:"USD",qtyType:"Firm"}), req:["ref","client","price"], make:v=>({...v,stage:"offer",kind:"offshore"})},
-  order:{title:"New order", sub:"An order already confirmed by the mill, e.g. an offshore deal.",
-    fields:["ref","client","port","supplier","product","qty","cur","purchase","price","total","profit","advPct","balDays","millRef","eta","shipMonth","notes","file:pi"],
+  order:{title:"New order", sub:"A signed client order (F or H number).",
+    fields:["ref","client","clientCode","dest","supplier","product","qty","cur","price","total","terms","advPct","balDays","dues","signedOn","millRef","eta","etaNote","notes","file:signed","file:pi"],
     defs:()=>({cur:"USD"}), req:["ref","client"], make:v=>({...v,stage:"order",kind:"offshore",millOrder:v.millOrder||v.ref})}
 };
 const EDIT_GROUPS = [
-  ["Deal",["client","clientCode","contact","salesman","product","spec","qty","qtyType","dest","lot","inqDate"]],
-  ["Offer",["ref","offerDate","cur","price","priceNote","total","terms","advPct","balDays","shipMonth","validUntil","signedOn"]],
+  ["Deal",["client","clientCode","contact","product","spec","qty","qtyType","dest","lot"]],
+  ["Order and terms",["ref","cur","price","priceNote","total","terms","advPct","balDays","shipMonth","signedOn"]],
   ["Mill & order",["millOrder","millRef","piOn","supplier","purchase","profit","port","mayCancel"]],
   ["Payments",["paid","balance","dues","depositOn","balanceDue","paidOn"]],
   ["Shipment",["shippedOn","bl","blNote","eta","etaNote","arrivedOn"]],
@@ -772,8 +757,6 @@ function actHTML(d) {
   if (!S.canWrite) return "";
   const id = esc(d._id), b = (act, txt, cls="") => `<button type="button" class="btn sm ${cls}" data-act="${act}" data-id="${id}">${txt}</button>`;
   switch (d.stage) {
-    case "inquiry": return b("makeOffer","Make offer →","primary") + b("lost","Lost","ghost");
-    case "offer":   return b("signed","Client signed →","primary") + b("lost","Lost","ghost");
     case "signed":  return b("mill","Mill confirmed →","primary") + (needsDeposit(d) ? b("deposit","Deposit paid") : "") + b("pay","Payment received") + b("lost","Cancel","ghost");
     case "order": {
       const next = needsDeposit(d) ? ["deposit","Deposit paid"] : !isShipped(d) ? ["shipped","Shipped →"] : !isArrived(d) ? ["arrived","Arrived →"] : ["paid","Paid in full →"];
@@ -832,8 +815,6 @@ function render() {
   $("#attn").innerHTML = `<span class="lbl">Needs attention</span>` + chip("1","l1","Urgent",cnt(1)) + chip("2","l2","This week",cnt(2)) +
     chip("3","l3","Sales follow-up",cnt(3)) + chip("arr","l4","Arriving in 30 days",arr) +
     (S.fl ? `<button type="button" class="btn ghost sm" data-f="">Show all</button>` : "");
-  const sel = $("#fs"), cur = sel.value, names = [...new Set([...S.cfg.salesmen, ...all.map(d=>d.salesman).filter(Boolean)])];
-  sel.innerHTML = `<option value="">All salesmen</option>` + names.map(n => `<option ${n===cur?"selected":""}>${esc(n)}</option>`).join("");
   const TAB_LBL = {home:"Today", week:"This week", clients:"Clients", deals:"All deals"};
   const urgent = st => open.filter(d => (st ? d.stage === st : true) && d._a.level === 1).length;
   $("#tabs").innerHTML = TABS.map(k => {
@@ -915,7 +896,6 @@ function ovGroup(title, dotCls, rows, open) {
     <div class="ov-list">${rows.join("") || `<span class="ov-empty">Nothing here.</span>`}</div></details>`;
 }
 const DOC_RULES = [
-  ["offer", "Offer sent", d => SIDX[d.stage === "closed" ? (d.prevStage || "order") : d.stage] >= 1 && !!d.offerDate],
   ["signed", "Signed offer", d => SIDX[d.stage === "closed" ? (d.prevStage || "order") : d.stage] >= 2],
   ["pi", "Mill PI (signed)", d => SIDX[d.stage === "closed" ? (d.prevStage || "order") : d.stage] >= 3],
   ["deposit", "Deposit proof", d => !!d.depositOn],
@@ -1012,9 +992,7 @@ function groupHTML(title, files, scope, ownerId, cat) {
     ${busyLine(scope, ownerId, cat)}</div>`;
 }
 const STEPS = [
-  {k:"inquiry", t:"Inquiry received", cat:"inquiry"},
-  {k:"offer",   t:"Offer sent", cat:"offer", act:"makeOffer", when:["inquiry"], btn:"Make offer →"},
-  {k:"signed",  t:"Client signed the offer", cat:"signed", act:"signed", when:["offer"], btn:"Client signed →"},
+  {k:"signed",  t:"Client signed the contract", cat:"signed", when:[]},
   {k:"pi",      t:"Mill confirmed · PI signed", cat:"pi", act:"mill", when:["signed"], btn:"Mill confirmed →"},
   {k:"deposit", t:"Deposit received", cat:"deposit", act:"deposit", when:["signed","order"], btn:"Deposit paid"},
   {k:"shipped", t:"Shipped", cat:"shipping", act:"shipped", when:["order"], btn:"Mark shipped"},
@@ -1022,7 +1000,7 @@ const STEPS = [
   {k:"paid",    t:"Paid in full", cat:"payment", act:"paid", when:["order"], btn:"Paid in full"}
 ];
 const SIDX = {inquiry:0, offer:1, signed:2, order:3, closed:4};
-const ATT_LBL = {inquiry:"inquiry", offer:"offer", signed:"signed offer", pi:"mill PI", deposit:"deposit proof", shipping:"B/L", payment:"payment proof"};
+const ATT_LBL = {signed:"signed contract", pi:"mill PI", deposit:"deposit proof", shipping:"B/L", payment:"payment proof"};
 function stepInfo(d, k) {
   const eff = SIDX[d.stage === "closed" ? (d.prevStage || (d.outcome === "paid" ? "order" : (d.ref ? "offer" : "inquiry"))) : d.stage] ?? 0;
   const has = cat => filesOf(d).some(f => f.cat === cat);
@@ -1108,9 +1086,9 @@ function viewHTML(d) {
     <h4 class="v-h">Details</h4>
     <div class="kvs">
       ${duesCard(d)}
-      ${kvCard("Client", [["Client", d.client], ["Account no.", d.clientCode], ["Contact", d.contact], ["Salesman", d.kind === "offshore" ? (d.salesman || "Offshore desk") : d.salesman], ["Type", d.kind === "offshore" ? "Offshore" : "Local (Lebanon)"], ["Delivery / port", d.dest || d.port]])}
+      ${kvCard("Client", [["Client", d.client], ["Account no.", d.clientCode], ["Contact", d.contact], ["Delivery / port", d.dest || d.port]])}
       ${kvCard("Product", [["Product", d.product], ["GSM / size", d.spec], ["Quantity", qty], ["Price / MT", d.price != null && d.price !== "" ? `${d.cur === "EUR" ? "€" : "$"}${d.price}` : d.priceNote || ""], ["Price note", d.price != null && d.price !== "" ? d.priceNote : ""], ["Lot", d.lot], ["Value", money(v, d.cur)], ["Purchase / MT", d.purchase != null ? `${d.cur === "EUR" ? "€" : "$"}${d.purchase}` : ""], ["Profit", isFinite(num(d.profit)) ? `${money(num(d.profit), d.cur)} (${margin})` : ""]])}
-      ${kvCard("Offer and terms", [["Offer ref", d.ref], ["Offer date", fD(d.offerDate)], ["Valid until", d.validUntil ? fD(d.validUntil) : (d.stage === "offer" ? "Immediate confirmation" : "")], ["Payment terms", d.terms], ["Advance", adv > 0 ? `${Math.round(adv*100)}% = ${money(v*adv, d.cur)}` : ""], ["Shipment month", fM(d.shipMonth)]])}
+      ${kvCard("Order and terms", [["Order no.", d.ref], ["Contract signed", fD(d.signedOn)], ["Payment terms", d.terms], ["Advance", adv > 0 ? `${Math.round(adv*100)}% = ${money(v*adv, d.cur)}` : ""], ["Shipment month", fM(d.shipMonth)]])}
       ${kvCard("Mill and shipping", [["Mill order", d.millOrder], ["Mill PI no.", d.millRef], ["PI signed on", fD(d.piOn)], ["Mill / supplier", d.supplier], ["B/L", d.bl || d.blNote], ["B/L note", d.bl ? d.blNote : ""], ["ETA", d.eta ? fD(d.eta) : d.etaNote], ["Shipped on", fD(d.shippedOn)], ["Arrived on", fD(d.arrivedOn)]])}
       ${kvCard("Payments", [["Deposit received", fD(d.depositOn)], ["Balance", adv > 0 ? money(v*(1-adv), d.cur) : ""], ["Balance due", due != null ? fDn(due) : ""], ["Remind client on", !d.paidOn && rem != null ? fDn(rem) : ""], ["Paid in full", fD(d.paidOn)]])}
     </div>
@@ -1378,22 +1356,19 @@ document.addEventListener("change", e => {
 });
 let qT = null;
 $("#q").addEventListener("input", e => { clearTimeout(qT); qT = setTimeout(() => { S.q = e.target.value.trim().toLowerCase(); render(); }, 120); });
-$("#fs").addEventListener("change", e => { S.fs = e.target.value; render(); });
 
 /* ------------------------------------------------------------------ settings */
 function renderSettings() {
   const box = $("#setbox"); box.hidden = !S.canWrite; if (!S.canWrite) return;
   const c = S.cfg, f = (id, label, v) => `<div class="fld"><label for="${id}">${esc(label)}</label><input type="number" min="0" id="${id}" value="${esc(v)}"></div>`;
   $("#setform").innerHTML = f("s-rem","Remind client: days before arrival",c.remindDays) + f("s-due","Balance due after arrival: remind days before",c.dueRemindDays) +
-    f("s-fol","Follow up an offer after (days)",c.followDays) + f("s-inq","Inquiry waiting after (days)",c.inquiryDays) + f("s-bl","Warn 'no B/L' when ETA within (days)",c.blWarnDays) +
-    `<div class="fld wide" style="grid-column:1/-1"><label for="s-sales">Salesmen (comma separated)</label><input type="text" id="s-sales" value="${esc(c.salesmen.join(", "))}"></div>` +
+    f("s-bl","Warn 'no B/L' when ETA within (days)",c.blWarnDays) +
     `<div><button type="submit" class="btn primary sm">Save settings</button></div>`;
 }
 $("#setform").addEventListener("submit", async e => {
   e.preventDefault();
   const n = id => { const x = Number(document.getElementById(id).value); return isFinite(x) && x >= 0 ? x : 0; };
-  const next = {remindDays:n("s-rem"), dueRemindDays:n("s-due"), followDays:n("s-fol"), inquiryDays:n("s-inq"), blWarnDays:n("s-bl"),
-    salesmen: $("#s-sales").value.split(",").map(s => s.trim()).filter(Boolean)};
+  const next = {...S.cfg, remindDays:n("s-rem"), dueRemindDays:n("s-due"), blWarnDays:n("s-bl")};
   try { await queued("_cfg", () => S.db.doc("config/settings").set(next)); toast("Settings saved"); } catch (err) { writeFail(err); }
 });
 
@@ -1406,11 +1381,11 @@ async function exportExcel() {
   try {
     const X = await loadXLSX();
     const rows = [...S.deals.values()].filter(d => !S.biz || kindOf(d) === S.biz).map(d => ({ ...d, _a: assess(d) })).sort((a,b) => STAGES.findIndex(s=>s.key===a.stage) - STAGES.findIndex(s=>s.key===b.stage) || cmp(a,b)).map(d => ({
-      "Stage": STAGES.find(s => s.key === d.stage)?.title || d.stage, "Alert": d._a.label, "Ref / order": d.ref || "", "Type": d.kind === "offshore" ? "Offshore" : "Local",
-      "Client": d.client || "", "Salesman": d.salesman || "", "Product": d.product || "", "Qty MT": isFinite(num(d.qty)) ? num(d.qty) : "", "Qty type": d.qtyType || "",
+      "Stage": STAGES.find(s => s.key === d.stage)?.title || d.stage, "Alert": d._a.label, "Order": d.ref || "",
+      "Client": d.client || "", "Product": d.product || "", "Qty MT": isFinite(num(d.qty)) ? num(d.qty) : "", "Qty type": d.qtyType || "",
       "Account no.": d.clientCode || "", "Cur": d.cur || "", "Price / MT": d.price ?? (d.priceNote || ""), "Value": value(d) || "", "Paid": paidOf(d) || 0, "Balance": balanceOf(d) || 0,
       "Dues by month": duesOf(d).map(([m, v]) => `${fM(m)}: ${Math.round(v)}`).join("; "), "Payment terms": d.terms || "", "Advance %": isFinite(num(d.advPct)) ? num(d.advPct) : "",
-      "Ship month": fM(d.shipMonth), "Valid until": fD(d.validUntil), "Offer date": fD(d.offerDate), "Signed on": fD(d.signedOn), "Mill order": d.millOrder || "",
+      "Ship month": fM(d.shipMonth), "Signed on": fD(d.signedOn), "Mill order": d.millOrder || "",
       "Mill PI no.": d.millRef || "", "PI signed on": fD(d.piOn), "Deposit on": fD(d.depositOn), "Shipped on": fD(d.shippedOn), "B/L": d.bl || d.blNote || "", "ETA": d.eta ? fD(d.eta) : (d.etaNote || ""), "Destination": d.dest || "",
       "Arrived on": fD(d.arrivedOn), "Balance due": fDn(balanceDue(d)), "Paid on": fD(d.paidOn), "Port": d.port || "", "Profit": d.profit ?? "",
       "Attachments": filesOf(d).map(f => `${CAT_NAME[f.cat]||"Other"}: ${f.name}`).join("; "), "Notes": d.notes || "" }));
