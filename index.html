@@ -285,6 +285,24 @@ button.st:hover{border-color:var(--brand);color:var(--brand);background:var(--sk
 .sf-chip.on{border-color:var(--brand);background:var(--sky);outline:2px solid var(--brand)} .sf-chip.zero{opacity:.55}
 .sf-on{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:var(--sky);border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:14px}
 @media (max-width:520px){.sf-chips{grid-template-columns:1fr 1fr}.sf-chip{padding:10px}.sf-chip .sf-l{font-size:13px}}
+.pl-q{width:100%;font:inherit;font-size:15px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin:2px 0 12px;background:var(--surface);color:var(--ink)}
+.pl-seg{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:5px;margin:0 0 16px;box-shadow:var(--shadow)}
+.pl-seg button{border:0;border-radius:9px;background:transparent;padding:10px 8px;font:inherit;font-weight:700;font-size:15px;color:var(--ink);display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer}
+.pl-seg button small{font-weight:500;font-size:11.5px;color:var(--muted)} .pl-seg button[aria-selected="true"]{background:var(--brand);color:#fff} .pl-seg button[aria-selected="true"] small{color:#dbe4ff}
+.pl-chips{margin-bottom:14px} .pl-h{margin-top:18px} .pl-h h3{margin:0;font-family:var(--f-display);font-size:20px;color:var(--brand)}
+.pl-forms{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 2px} .pl-forms span{background:var(--sky);border-radius:8px;padding:4px 9px;font-weight:700;font-size:14px;font-variant-numeric:tabular-nums}
+.pl-forms small{font-weight:500;color:var(--muted);font-size:11.5px;margin-right:5px}
+.pl-sug{margin-bottom:22px} .pl-sug summary{list-style:none;cursor:pointer;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px} .pl-sug summary::-webkit-details-marker{display:none}
+.pl-sug summary h2{margin:0} .pl-sug summary::after{content:"▾";color:var(--muted)} .pl-sug:not([open]) summary::after{content:"▸"}
+.linkish{border:0;background:none;padding:0;font:inherit;color:inherit;cursor:pointer;text-align:left} .linkish b{text-decoration:underline;text-decoration-color:var(--line)}
+.sg-now{margin:4px 0 6px;font-size:13px;color:var(--muted)} .sg-foot{margin:6px 0 0;font-size:12px}
+.sg{display:flex;gap:12px;justify-content:space-between;border-top:1px solid var(--line);padding:8px 0}
+.sg-m{display:flex;flex-direction:column;gap:1px;min-width:0} .sg-m b{font-size:15px} .sg-m span{font-size:12.5px;color:var(--muted)} .sg-n{font-size:12px!important}
+.sg-p{display:flex;flex-direction:column;align-items:flex-end;text-align:right;gap:1px;white-space:nowrap} .sg-p b{font-size:16px} .sg-p small{font-size:11.5px;color:var(--muted)}
+.sg-p .pos{color:var(--green);font-weight:700;font-size:13px} .sg-p .neg{color:var(--red);font-weight:700;font-size:13px}
+.sg-box{grid-column:1 / -1;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:6px 14px 10px}
+.pl-sup{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+@media (max-width:520px){.sg{flex-direction:column;gap:4px}.sg-p{align-items:flex-start;text-align:left;flex-direction:row;flex-wrap:wrap;gap:4px 10px;align-items:baseline}}
 .ov{display:flex;flex-direction:column;gap:14px}
 .ov-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
 .ov-card > h3{margin:0;padding:12px 16px;font-family:var(--f-display);font-size:21px;color:var(--brand);border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px}
@@ -482,9 +500,9 @@ const CLIP = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-
 
 /* ------------------------------------------------------------------ state */
 const S = {db:null, files:null, assets:null, downloads:null, canWrite:false, loaded:false, deals:new Map(), clients:new Map(), cfg:{...DEFAULTS},
-  q:"", fs:"", fl:"", tab:"home", collapsed:{}, limit:{}, openId:null, busy:{}};
+  q:"", fs:"", fl:"", tab:"home", prices:{}, pf:"", pq:"", pOld:false, collapsed:{}, limit:{}, openId:null, busy:{}};
 try { const c = JSON.parse(localStorage.getItem("hipco-deals-ui")||"{}"); S.collapsed = c.collapsed||{}; S.installHidden = !!c.installHidden; S.tab = c.tab || "home"; } catch(e) {}
-const TABS = ["home","week","offers","clients","deals"];   // focus: reminders (inquiries dropped, Nov 2026)
+const TABS = ["home","week","offers","clients","deals","prices"];   // focus: reminders (inquiries dropped, Nov 2026)
 /* phone back button: business chooser is the root; then Overview {b}, a tab {t}, an open deal {m}.
    "back" closes the deal, then returns to Overview, then to the chooser. */
 S.tab = "home"; S.biz = null;
@@ -841,11 +859,11 @@ function render() {
   $("#attn").innerHTML = `<span class="lbl">Needs attention</span>` + chip("1","l1","Urgent",cnt(1)) + chip("2","l2","This week",cnt(2)) +
     chip("3","l3","Sales follow-up",cnt(3)) + chip("arr","l4","Arriving in 30 days",arr) +
     (S.fl ? `<button type="button" class="btn ghost sm" data-f="">Show all</button>` : "");
-  const TAB_LBL = {home:"Today", week:"This week", offers:"Offers", clients:"Clients", deals:"Shipments"};
+  const TAB_LBL = {home:"Today", week:"This week", offers:"Offers", clients:"Clients", deals:"Shipments", prices:"Prices"};
   const urgent = st => open.filter(d => (st ? d.stage === st : true) && d._a.level === 1).length;
   $("#tabs").innerHTML = TABS.map(k => {
     const nonOffer = open.filter(d => d.stage !== "offer");
-    const n = k === "home" ? nonOffer.filter(d => d._a.level === 1).length : k === "week" ? nonOffer.filter(d => d._a.level === 2 || d._a.level === 3).length : k === "offers" ? open.filter(d => d.stage === "offer").length : k === "clients" ? new Set(open.filter(d => d.stage !== "offer").map(d => clientKey(d.client))).size : open.filter(d => d.stage !== "offer").length;
+    const n = k === "home" ? nonOffer.filter(d => d._a.level === 1).length : k === "week" ? nonOffer.filter(d => d._a.level === 2 || d._a.level === 3).length : k === "offers" ? open.filter(d => d.stage === "offer").length : k === "prices" ? plRows("current").length : k === "clients" ? new Set(open.filter(d => d.stage !== "offer").map(d => clientKey(d.client))).size : open.filter(d => d.stage !== "offer").length;
     const u = 0;
     return `<button type="button" data-tab="${k}" ${S.tab===k?'aria-current="page"':""}><b>${n}</b><span class="tl">${TAB_LBL[k]}${u?` <span class="dotn">${u}</span>`:""}</span></button>`;
   }).join("");
@@ -854,6 +872,7 @@ function render() {
   if (S.tab === "week") { $("#bands").innerHTML = weekHTML(open); return; }
   if (S.tab === "offers") { $("#bands").innerHTML = offersHTML(open.filter(d => d.stage === "offer")); return; }
   if (S.tab === "clients") { $("#bands").innerHTML = clientsHTML(open.filter(d => d.stage !== "offer")); return; }
+  if (S.tab === "prices") { $("#bands").innerHTML = pricesHTML(open); return; }
   $("#bands").innerHTML = shipmentsHTML(open.filter(d => d.stage !== "offer"), all.filter(d => d.stage === "closed"));
 }
 /* ------------------------------------------------------------------ shipments: nearest arrival first, with filters */
@@ -902,6 +921,111 @@ function shipmentsHTML(deals, closed) {
     <div class="sf">${groups}</div>${head}${body}</section>`;
 }
 document.addEventListener("click", e => { const b = e.target.closest("[data-sf]"); if (!b) return; S.sf = S.sf === b.dataset.sf ? "" : b.dataset.sf; render(); const h = document.querySelector(".sf-on") || document.querySelector("#bands .list"); if (h && S.sf) h.scrollIntoView({block: "start", behavior: "smooth"}); });
+/* ------------------------------------------------------------------ price list (from Supabase kv "prices": current / older / suppliers) */
+const PL_LABEL = p => p === "FBB" ? "FBB/GC1" : p;
+const plRows = which => ((S.prices[which] || {}).rows || []);
+const plPrices = c => c.f.filter(f => typeof f[1] === "number");
+const plLow = c => { const p = plPrices(c); return p.length ? p.reduce((a, b) => b[1] < a[1] ? b : a) : null; };
+const plCur = (c, f) => (f && f[2] === "EUR") ? "€" : "$";
+const plFormT = f => f === "Not stated" || !f ? "Price" : f;
+/* what kind of paper a deal is, in the price list's words */
+function catOf(t) {
+  t = String(t || "");
+  if (/NCR/i.test(t)) return "NCR"; if (/grey ?board/i.test(t)) return "Grey board"; if (/duplex/i.test(t)) return "GC / Duplex board";
+  if (/testliner|fluting|\bW?TTL?\b|kraft/i.test(t)) return "Testliner"; if (/CKB/i.test(t)) return "CKB"; if (/sticker/i.test(t)) return "Stickers";
+  if (/coated|\bCTD\b|matt|gloss/i.test(t)) return "Coated"; if (/FBB|GC1|blue leaf|northstar|holmen/i.test(t)) return "FBB";
+  if (/A4/i.test(t)) return "A4 Cut Size"; if (/copier|woodfree|\bU?WF\b|emerald/i.test(t)) return "UWF"; return "";
+}
+/* mill / brand family, so we can suggest a different mill */
+function famOf(t) {
+  t = String(t || "");
+  if (/blue ?leaf|\bLS\b|liansheng/i.test(t)) return "Blue Leaf / LS"; if (/northstar/i.test(t)) return "Northstar";
+  if (/\bAPP\b|sinar/i.test(t)) return "APP"; if (/holmen/i.test(t)) return "Holmen"; if (/chenming/i.test(t)) return "Chenming";
+  if (/nine dragons/i.test(t)) return "Nine Dragons"; if (/paper ?one|april/i.test(t)) return "April / PaperOne"; if (/navigator|chambril/i.test(t)) return "Navigator";
+  if (/emerald/i.test(t)) return "Emerald"; if (/kipa/i.test(t)) return "Kipaş"; return "";
+}
+const portsOf = t => ["Beirut", "Mersin", "Aqaba", "Um Qasr", "Abidjan"].filter(p => new RegExp(p.replace(" ", " ?"), "i").test(String(t || "")) || (p === "Beirut" && /karbala|baghdad/i.test(String(t || ""))));
+function gsmOk(g, x) {
+  if (!x) return true; const n = String(g || "").match(/\d+/g); if (!n) return true; const v = n.map(Number);
+  if (/up|\+|and above/i.test(g)) return x >= v[0];
+  return x >= Math.min(...v) && x <= Math.max(...v);
+}
+/* other mills we can offer for an order whose mill PI isn't signed yet: cheapest current price per mill, same product, same port first */
+function suggestFor(d) {
+  const cat = catOf(d.product), c = costOf(d), fam = famOf(`${d.product} ${c.product || ""} ${c.supplier || ""}`);
+  const g = (String(d.product || "").match(/(\d{2,4}) ?g\b/i) || [])[1], ports = portsOf(d.dest || d.port);
+  const out = {cat, fam, ports, cost: num(c.purchase), sale: num(d.price), list: [], other: []};
+  if (!cat) return out;
+  const best = new Map();
+  for (const r of plRows("current")) {
+    if (r.p !== cat || !gsmOk(r.g, g && Number(g))) continue;
+    const lo = plLow(r); if (!lo || lo[2] === "EUR") continue;
+    const f = famOf(`${r.b} ${r.s}`); if (fam && f === fam) continue;
+    const key = `${f || r.b || r.s}|${r.s}`, inPort = !ports.length || portsOf(r.t).some(p => ports.includes(p));
+    const cur = best.get(key);
+    if (!cur || (inPort && !cur.inPort) || (inPort === cur.inPort && lo[1] < cur.price)) best.set(key, {r, f, price: lo[1], form: lo[0], inPort});
+  }
+  const all = [...best.values()].sort((a, b) => a.price - b.price);
+  out.list = all.filter(x => x.inPort).slice(0, 3); out.other = all.filter(x => !x.inPort && !/abidjan/i.test(x.r.t)).slice(0, 2);
+  return out;
+}
+const daysOld = iso => iso ? T() - dn(iso) : null;
+function sugLine(x, s) {
+  const r = x.r, gap = isFinite(s.sale) ? s.sale - x.price : NaN, old = daysOld(r.d);
+  const mill = x.f || r.b || "Mill not stated";
+  const vsCost = isFinite(s.cost) ? (x.price < s.cost ? `$${s.cost - x.price} cheaper than now` : x.price > s.cost ? `$${x.price - s.cost} more than now` : "same as now") : "";
+  return `<div class="sg">
+    <div class="sg-m"><b>${esc(mill)}</b><span>${esc([r.s, r.b && r.b !== mill ? r.b : "", r.g].filter(Boolean).join(" · "))}</span>
+      <span class="sg-n">${esc([`${r.t || "terms to confirm"}`, `quoted ${fD(r.d)}${old != null && old > 21 ? " (old, reconfirm)" : ""}`, r.n].filter(Boolean).join(" · "))}</span></div>
+    <div class="sg-p"><b>$${x.price}/MT</b><small>${esc(plFormT(x.form))}</small>${isFinite(gap) ? `<span class="${gap > 0 ? "pos" : "neg"}">${gap > 0 ? `Margin $${gap}/MT (${(gap / s.sale * 100).toFixed(1)}%)` : `$${-gap} above your price`}</span>` : ""}${vsCost ? `<small>${esc(vsCost)}</small>` : ""}</div>
+  </div>`;
+}
+function suggestHTML(d, compact) {
+  const s = suggestFor(d), c = costOf(d);
+  const now = `${s.fam ? `Now: ${s.fam}` : "Now: mill not stated"}${isFinite(s.cost) ? ` at $${s.cost}/MT` : ""}${c.supplier ? ` (${c.supplier})` : ""}${isFinite(s.sale) ? ` · you sell at $${s.sale}/MT` : ""}`;
+  const body = !s.cat ? `<p class="note">This product isn't in the price list, so there's nothing to suggest yet.</p>`
+    : !s.list.length && !s.other.length ? `<p class="note">No other mill for ${esc(PL_LABEL(s.cat))} in the current price list.</p>`
+    : (s.list.length ? s.list.map(x => sugLine(x, s)).join("") : `<p class="note">No other mill quoted ${esc(s.ports.join(" / "))} for this.</p>`)
+      + (s.other.length && !s.list.length ? `<h6 class="kv-sub">Other ports</h6>${s.other.map(x => sugLine(x, s)).join("")}` : "");
+  return `<p class="sg-now">${esc(now)}</p>${body}
+    <p class="note sg-foot">Supplier prices from the price list of 02.11.2026${isFinite(s.sale) && /karbala|baghdad/i.test(d.dest || "") ? " · margin is before inland transport to Iraq" : " · margin is before any extra costs"}. Reconfirm with the supplier before offering.</p>`;
+}
+const waitingPI = open => open.filter(d => (d.stage === "order" || d.stage === "signed") && !hasPI(d));
+function pricesHTML(open) {
+  if (!S.prices.current) return `<div class="page-h"><h2>Price list</h2></div><div class="empty"><span>The price list isn't loaded yet.</span></div>`;
+  const which = S.pOld ? "older" : "current", rows = plRows(which), q = S.pq || "";
+  const cats = [...new Set(rows.map(r => r.p))];
+  const pf = cats.includes(S.pf) ? S.pf : "";
+  const shown = rows.filter(r => (!pf || r.p === pf) && (!q || `${r.p} ${PL_LABEL(r.p)} ${r.s} ${r.b} ${r.g} ${r.t} ${r.n}`.toLowerCase().includes(q)));
+  const chips = `<div class="sf-chips pl-chips"><button type="button" class="sf-chip ${!pf ? "on" : ""}" data-pf=""><span class="sf-l">All products</span><b>${rows.length}</b></button>${cats.map(c => `<button type="button" class="sf-chip ${pf === c ? "on" : ""}" data-pf="${esc(c)}"><span class="sf-l">${esc(PL_LABEL(c))}</span><b>${rows.filter(r => r.p === c).length}</b></button>`).join("")}</div>`;
+  const card = r => { const lo = plLow(r), old = daysOld(r.d), isNew = /^NEW/.test(r.s);
+    return `<article class="todo pl-card ${isNew ? "l2" : ""}"><div class="todo-main" style="cursor:default">
+      <span class="t-top"><b>${esc(r.s.replace(/^NEW · /, ""))}</b>${r.b ? `<span class="tag">${esc(r.b)}</span>` : ""}${isNew ? `<span class="tag ok">New</span>` : ""}<span class="mono">${esc(fD(r.d))}${old != null ? ` · ${old} days ago` : ""}</span></span>
+      <span class="t-do">${esc(PL_LABEL(r.p))}${r.g ? ` · ${esc(r.g)}` : ""} · ${esc(r.t || "terms to confirm")}</span>
+      <span class="pl-forms">${plPrices(r).map(f => `<span><small>${esc(plFormT(f[0]))}</small>${plCur(r, f)}${f[1]}</span>`).join("")}${r.f.filter(f => typeof f[1] !== "number").map(f => `<span><small>${esc(plFormT(f[0]))}</small>${esc(f[1])}</span>`).join("")}</span>
+      ${r.n ? `<span class="t-sub">${esc(r.n)}</span>` : ""}
+    </div><div class="t-side">${lo ? `<span class="t-amt">${plCur(r, lo)}${lo[1]}</span><small>lowest / MT</small>` : ""}</div></article>`; };
+  const groups = [...new Set(shown.map(r => r.p))].map(p => `<div class="page-h pl-h"><h3>${esc(PL_LABEL(p))}</h3><span class="meta">${shown.filter(r => r.p === p).length} offers</span></div><div class="todos">${shown.filter(r => r.p === p).map(card).join("")}</div>`).join("");
+  const wait = waitingPI(open).sort((a, b) => (arrivalDay(a) ?? 1e9) - (arrivalDay(b) ?? 1e9));
+  const seg = `<div class="pl-seg" role="tablist"><button type="button" role="tab" data-pview="list" aria-selected="${S.pView !== "sug"}">Price list<small>${plRows("current").length} current offers</small></button><button type="button" role="tab" data-pview="sug" aria-selected="${S.pView === "sug"}">Other mills to offer<small>${wait.length} orders waiting for the mill PI</small></button></div>`;
+  if (S.pView === "sug") return `${seg}<div class="page-h"><h2>Other mills to offer</h2><span class="meta">Orders still waiting for the mill PI, nearest arrival first, with the cheapest other mills from the current price list</span></div>` + (wait.length ? `<div class="todos">${wait.map(d => `<article class="todo l2 sg-card"><div class="todo-main" style="cursor:default">
+      <button type="button" class="t-top linkish" data-open="${esc(d._id)}"><b>${esc(d.client)}</b><span class="mono">${esc(d.ref || "")}</span><span class="tag">${esc(d.product || "")}</span>${isFinite(num(d.qty)) ? `<span class="mono">${mt(num(d.qty))} MT</span>` : ""}</button>
+      ${suggestHTML(d, true)}</div></article>`).join("")}</div>` : `<div class="empty"><span>Every order has its mill PI. 👍</span></div>`);
+  const sup = (S.prices.suppliers || {}).rows || [];
+  const supHTML = sup.length ? `<details class="closed-box"><summary>Supplier contacts (${sup.length})</summary><div class="list pl-sup">${sup.map(s => `<div class="kv-card"><h5>${esc(s.name)}${s.status ? ` <span class="tag">${esc(s.status)}</span>` : ""}</h5>${[["Company", s.company], ["Contact", [s.contact, s.role].filter(Boolean).join(", ")], ["Phone", s.phone], ["Email", s.email], ["Web", s.web], ["Products", s.products], ["Ports", s.ports], ["Last offer", s.last]].filter(([, v]) => v).map(([l, v]) => `<div class="kv"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join("")}</div>`).join("")}</div></details>` : "";
+  return `${seg}<section class="band"><div class="page-h"><h2>Price list</h2><span class="meta">${S.pOld ? "Older prices for reference (CFR Mersin & Aqaba)" : "Current supplier offers"} · ${esc(fD((S.prices[which] || {}).asOf))} · USD/MT unless €</span><span style="flex:1"></span>
+    <button type="button" class="btn sm ${S.pOld ? "" : "ghost"}" data-pold="1">${S.pOld ? "← Current prices" : "Older prices"}</button></div>
+    <input type="search" id="pq" class="pl-q" placeholder="Search supplier, mill, GSM, port…" value="${esc(q)}" aria-label="Search the price list">
+    ${chips}${shown.length ? groups : `<div class="empty"><span>No prices match.</span></div>`}${supHTML}</section>`;
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-pf],[data-pold],[data-pview]"); if (!b) return;
+  if (b.dataset.pview) { S.pView = b.dataset.pview; render(); window.scrollTo({top: 0}); return; }
+  if (b.dataset.pold) { S.pOld = !S.pOld; S.pf = ""; } else S.pf = b.dataset.pf;
+  render();
+});
+let pqT; document.addEventListener("input", e => { if (e.target.id !== "pq") return; clearTimeout(pqT);
+  pqT = setTimeout(() => { S.pq = e.target.value.trim().toLowerCase(); const pos = e.target.selectionStart; render(); const n = $("#pq"); if (n) { n.focus(); n.setSelectionRange(pos, pos); } }, 200); });
 /* ------------------------------------------------------------------ reminders: what to do, in words */
 function todoText(d) {
   const a = d._a, bal = usd(balanceOf(d)), now = dueIn(d, ymNow());
@@ -1207,6 +1331,7 @@ function viewHTML(d) {
       ${kvCard("Mill and shipping", [["Mill order", d.millOrder], ["Mill PI no.", d.millRef], ["PI signed on", fD(d.piOn)], ["Mill / supplier", d.supplier], ["B/L", d.bl || d.blNote], ["B/L note", d.bl ? d.blNote : ""], ["ETA", d.eta ? fD(d.eta) : d.etaNote], ["Shipped on", fD(d.shippedOn)], ["Arrived on", fD(d.arrivedOn)]])}
       ${kvCard("Payments", [["Deposit received", fD(d.depositOn)], ["Balance", adv > 0 ? money(v*(1-adv), d.cur) : ""], ["Balance due", due != null ? fDn(due) : ""], ["Remind client on", !d.paidOn && rem != null ? fDn(rem) : ""], ["Paid in full", fD(d.paidOn)]])}
     </div>
+    ${(d.stage === "order" || d.stage === "signed") && !hasPI(d) && S.prices.current ? `<h4 class="v-h">Other mills to offer (mill PI not signed yet)</h4><div class="sg-box">${suggestHTML(d)}</div>` : ""}
     <h4 class="v-h">Comments</h4>
     <div class="cms">${commentsOf(d).slice().reverse().map(c => `<div class="cm"><p>${esc(c.text)}</p><small>${esc(fD(c.on))}${c.by ? ` · ${esc(String(c.by).split("@")[0])}` : ""}</small></div>`).join("") || `<p class="note" style="margin:0">No comments yet.</p>`}</div>
     ${S.canWrite ? `<div class="cm-add"><textarea id="cm-text" rows="2" placeholder="Add a comment: what happened, who to follow up with…"></textarea><button type="button" class="btn sm primary" data-cmadd="${esc(d._id)}">Add comment</button></div>` : ""}
@@ -1619,6 +1744,7 @@ async function start(u) {
     el.textContent = !st.online ? `· Offline${st.pending ? `, ${st.pending} change${st.pending===1?"":"s"} saved on this phone` : ""}` : st.pending ? `· Sending ${st.pending} change${st.pending===1?"":"s"}…` : "· Up to date"; });
   S.db.doc("config/settings").onSnapshot(s => { if (s.exists) S.cfg = {...DEFAULTS, ...s.data()}; renderSettings(); if (S.loaded) render(); });
   S.db.collection("clients").onSnapshot(snap => { const m = new Map(); snap.docs.forEach(doc => m.set(doc.id, doc.data())); S.clients = m; refreshOpen(); });
+  S.db.collection("prices").onSnapshot(snap => { const o = {}; snap.docs.forEach(doc => o[doc.id] = doc.data()); S.prices = o; if (S.loaded) { render(); refreshOpen(); } });
   S.db.collection("deals").onSnapshot(snap => {
     const m = new Map(); snap.docs.forEach(doc => m.set(doc.id, {...doc.data(), _id: doc.id}));
     S.deals = m; S.loaded = true;
