@@ -33,7 +33,11 @@ const money = (v: number, cur?: string) => { if (!isFinite(v) || v === 0) return
 const value = (d: Deal) => { const t = num(d.total); if (isFinite(t)) return t; const q = num(d.qty), p = num(d.price); return isFinite(q) && isFinite(p) ? q * p : 0; };
 const isShipped = (d: Deal) => !!(d.shipped || d.shippedOn || d.bl);
 const isArrived = (d: Deal) => !!(d.arrived || d.arrivedOn);
-const needsDeposit = (d: Deal) => num(d.advPct) > 0 && !d.depositOn;
+const needsDeposit = (d: Deal) => num(d.advPct) > 0 && !d.depositOn && !(num(d.paid) > 0);
+const ymNow = () => todayISO().slice(0, 7);
+const duesOf = (d: Deal) => Object.entries(d.dues && typeof d.dues === "object" ? d.dues : {}).filter(([m, v]) => /^\d{4}-\d{2}$/.test(m) && num(v) > 0).map(([m, v]) => [m, num(v)] as [string, number]);
+const duesBefore = (d: Deal, ym: string) => duesOf(d).filter(([m]) => m < ym).reduce((s, [, v]) => s + v, 0);
+const dueIn = (d: Deal, ym: string) => duesOf(d).filter(([m]) => m === ym).reduce((s, [, v]) => s + v, 0);
 const balanceDue = (d: Deal) => { const b = dn(d.balanceDue); if (b != null) return b; const e = dn(d.eta), k = num(d.balDays); return e != null && isFinite(k) ? e - k : null; };
 const remindOn = (d: Deal, c: any) => { const e = dn(d.eta), b = balanceDue(d);
   if (b != null) return (e != null && b <= e) ? e - c.remindDays : b - c.dueRemindDays;
@@ -66,10 +70,13 @@ function assess(d: Deal, c: any): { level: number; label: string; hint?: string 
   if (!sh && me != null && t > me) return { level: 1, label: "Shipment late", hint: `Offer said ${fM(d.shipMonth)}` };
   if (!ar && e != null && e < t) return { level: 1, label: sh ? "ETA passed. Confirm arrival" : "ETA passed. Not shipped?", hint: `${t - e} day${t - e === 1 ? "" : "s"} ago` };
   if (ar && (due == null || due <= t)) return { level: 1, label: "Arrived. Client not paid" };
+  const late = duesBefore(d, ymNow());
+  if (late > 0) return { level: 1, label: "Payment overdue", hint: `${money(late)} from earlier months not received` };
   if (rem != null && rem <= t) return { level: 2, label: "Remind client to pay", hint: due != null ? `Balance due ${fDn(due)}` : (e != null ? `Arrives in ${e - t} days` : "") };
+  const now = dueIn(d, ymNow());
+  if (now > 0) return { level: 2, label: "Payment due this month", hint: `${money(now)} in ${fM(ymNow())}` };
   if (!sh && e != null && e - t <= c.blWarnDays) return { level: 2, label: "No B/L yet, ETA close", hint: `${e - t} days to ETA` };
   if (!sh && ms != null && t >= ms) return { level: 2, label: "Ship month. Not shipped yet", hint: `Offer said ${fM(d.shipMonth)}` };
-  if (d.kind === "offshore" && !d.millRef) return { level: 2, label: "Mill PI no. missing", hint: "Type the PI no. once the mill signs" };
   return { level: 0, label: "On track" };
 }
 
@@ -82,9 +89,10 @@ const FIELD: Record<string, string> = { client: "client", contact: "contact", sa
   price: "price", total: "total", cur: "currency", terms: "terms", advPct: "deposit %", balDays: "balance days", balanceDue: "balance due date",
   shipMonth: "shipment month", validUntil: "validity", millOrder: "mill order", millRef: "mill PI no.", bl: "B/L no.", eta: "ETA",
   notes: "notes", dest: "destination", port: "port", supplier: "supplier", purchase: "purchase price", profit: "profit", ref: "reference",
-  kind: "business", offerDate: "offer date", inqDate: "inquiry date", mayCancel: "may-cancel flag" };
+  kind: "business", offerDate: "offer date", inqDate: "inquiry date", mayCancel: "may-cancel flag", dues: "dues by month", balance: "balance",
+  clientCode: "account no.", priceNote: "price note", etaNote: "ETA", blNote: "B/L note", lot: "lot" };
 const SKIP = new Set(["files", "stage", "outcome", "prevStage", "closedOn", "signedOn", "piOn", "depositOn", "shipped", "shippedOn", "arrived",
-  "arrivedOn", "paidOn", "updatedAt", "updatedBy", "inqStatus"]);
+  "arrivedOn", "paidOn", "updatedAt", "updatedBy", "inqStatus", "paid", "payments"]);
 const url = (id: string) => `${APP_URL}?deal=${encodeURIComponent(id)}`;
 
 function dealChange(op: string, id: string, o: Deal | null, n: Deal | null): Msg | null {
@@ -106,7 +114,9 @@ function dealChange(op: string, id: string, o: Deal | null, n: Deal | null): Msg
   if (isShipped(n) && !isShipped(o)) out.push(`Shipped${n.bl ? ` · B/L ${n.bl}` : ""}${n.eta ? ` · ETA ${fD(n.eta)}` : ""}`);
   else if (n.eta && o.eta && n.eta !== o.eta) out.push(`ETA changed to ${fD(n.eta)}`);
   if (isArrived(n) && !isArrived(o)) out.push("Goods arrived");
-  if (n.paidOn && !o.paidOn && !(n.stage === "closed" && o.stage !== "closed")) out.push("Payment received");
+  const got = num(n.paid) - (isFinite(num(o.paid)) ? num(o.paid) : 0);
+  if (isFinite(got) && got > 0) out.push(`Payment received: ${money(got)}${isFinite(num(n.balance)) ? ` · balance ${num(n.balance) > 0 ? money(num(n.balance)) : "$0"}` : ""}`);
+  else if (n.paidOn && !o.paidOn && !(n.stage === "closed" && o.stage !== "closed")) out.push("Payment received");
   if (n.millRef && n.millRef !== o.millRef) out.push(`Mill PI no. ${n.millRef}`);
   const of = new Map((Array.isArray(o.files) ? o.files : []).map((f: any) => [f.id, f]));
   const nf = new Map((Array.isArray(n.files) ? n.files : []).map((f: any) => [f.id, f]));

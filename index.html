@@ -249,6 +249,14 @@ button.st:hover{border-color:var(--brand);color:var(--brand);background:var(--sk
 /* overview */
 .att-point{outline:3px solid var(--amber);outline-offset:2px;animation:attp 1s ease-in-out 3}
 @keyframes attp{50%{outline-color:transparent}}
+.d-val .bal{display:block;font-size:12px;color:var(--muted)} .d-val .bal b{font-size:12px;color:var(--ink)}
+.kv-sub{margin:10px 0 2px;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.dues-ed{display:flex;flex-direction:column;gap:6px} .due-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cl-sum{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;padding:12px 16px 4px}
+.cl-sum div,.cl-dues div{display:flex;flex-direction:column;min-width:0} .cl-sum span,.cl-dues span{font-size:11.5px;color:var(--muted)} .cl-sum b{font-size:14.5px;overflow-wrap:anywhere}
+.cl-dues{display:flex;flex-wrap:wrap;gap:6px;padding:8px 16px 10px}
+.cl-dues div{background:var(--sky);border-radius:8px;padding:5px 9px} .cl-dues b{font-size:13px} .cl-dues .now{outline:1.5px solid var(--amber)} .cl-dues .late{outline:1.5px solid var(--red)}
+@media (max-width:520px){.cl-sum{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .ov{display:flex;flex-direction:column;gap:14px}
 .ov-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
 .ov-card > h3{margin:0;padding:12px 16px;font-family:var(--f-display);font-size:21px;color:var(--brand);border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px}
@@ -450,7 +458,7 @@ const CLIP = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-
 const S = {db:null, files:null, assets:null, downloads:null, canWrite:false, loaded:false, deals:new Map(), clients:new Map(), cfg:{...DEFAULTS},
   q:"", fs:"", fl:"", tab:"home", collapsed:{}, limit:{}, openId:null, busy:{}};
 try { const c = JSON.parse(localStorage.getItem("hipco-deals-ui")||"{}"); S.collapsed = c.collapsed||{}; S.installHidden = !!c.installHidden; S.tab = c.tab || "home"; } catch(e) {}
-const TABS = ["home","inquiry","offer","signed","order","closed"];
+const TABS = ["home","inquiry","offer","signed","order","clients","closed"];
 /* phone back button: business chooser is the root; then Overview {b}, a tab {t}, an open deal {m}.
    "back" closes the deal, then returns to Overview, then to the chooser. */
 S.tab = "home"; S.biz = null;
@@ -503,7 +511,26 @@ const uErr = msg => { const e = new Error(msg); e.userMsg = msg; return e; };
 const value = d => { const t = num(d.total); if (isFinite(t)) return t; const q = num(d.qty), p = num(d.price); return isFinite(q)&&isFinite(p) ? q*p : 0; };
 const isShipped = d => !!(d.shipped || d.shippedOn || d.bl);
 const isArrived = d => !!(d.arrived || d.arrivedOn);
-const needsDeposit = d => num(d.advPct) > 0 && !d.depositOn;
+const needsDeposit = d => num(d.advPct) > 0 && !d.depositOn && !(num(d.paid) > 0);
+/* money owed: "paid" = received so far, "balance" = still owed, "dues" = {"2026-11": amount, ...} from the client statement */
+const ymNow = () => todayISO().slice(0, 7);
+const paidOf = d => isFinite(num(d.paid)) ? num(d.paid) : 0;
+const balanceOf = d => d.stage === "closed" ? 0 : isFinite(num(d.balance)) ? num(d.balance) : Math.max(0, value(d) - paidOf(d));
+const duesOf = d => Object.entries(d.dues && typeof d.dues === "object" ? d.dues : {}).filter(([m, v]) => /^\d{4}-\d{2}$/.test(m) && num(v) > 0).map(([m, v]) => [m, num(v)]).sort((a, b) => a[0] < b[0] ? -1 : 1);
+const duesBefore = (d, ym) => duesOf(d).filter(([m]) => m < ym).reduce((s, [, v]) => s + v, 0);
+const dueIn = (d, ym) => duesOf(d).filter(([m]) => m === ym).reduce((s, [, v]) => s + v, 0);
+const nextDue = d => duesOf(d).find(([m]) => m >= ymNow()) || null;
+const ymLabel = ym => fM(ym);
+const usd = v => money(v) === "—" ? "$0" : money(v);
+function payPatch(d, amt, on) {
+  const left = Math.max(0, balanceOf(d) - amt), dues = {};
+  let rest = amt;
+  for (const [m, v] of duesOf(d)) { const take = Math.min(v, rest); rest -= take; if (v - take > 0.5) dues[m] = Math.round(v - take); }
+  const p = {paid: Math.round((paidOf(d) + amt) * 100) / 100, balance: Math.round(left * 100) / 100, dues,
+    payments: [...(Array.isArray(d.payments) ? d.payments : []), {on, amt}]};
+  if (left <= 0.5) Object.assign(p, {paidOn: on, stage: "closed", outcome: "paid", prevStage: d.stage});
+  return p;
+}
 const balanceDue = d => { const b = dn(d.balanceDue); if (b!=null) return b; const e = dn(d.eta), k = num(d.balDays); return e!=null && isFinite(k) ? e - k : null; };
 const remindOn = (d,c) => { const e = dn(d.eta), b = balanceDue(d);
   if (b!=null) return (e!=null && b<=e) ? e - c.remindDays : b - c.dueRemindDays;
@@ -543,11 +570,15 @@ function assess(d) {
   if (!sh && me!=null && t > me) return {level:1,label:"Shipment late",hint:`Offer said ${fM(d.shipMonth)}`};
   if (!ar && e!=null && e < t) return {level:1,label: sh ? "ETA passed. Confirm arrival" : "ETA passed. Not shipped?",hint:`${t - e} day${t-e===1?"":"s"} ago`};
   if (ar && (due==null || due <= t)) return {level:1,label:"Arrived. Client not paid"};
+  const late = duesBefore(d, ymNow());
+  if (late > 0) return {level:1,label:"Payment overdue",hint:`${money(late)} from earlier months not received`};
   if (rem!=null && rem <= t) return {level:2,label:"Remind client to pay",hint: due!=null ? `Balance due ${fDn(due)}` : (e!=null ? `Arrives in ${e - t} days` : "")};
+  const now = dueIn(d, ymNow());
+  if (now > 0) return {level:2,label:"Payment due this month",hint:`${money(now)} in ${ymLabel(ymNow())}`};
   if (!sh && e!=null && e - t <= c.blWarnDays) return {level:2,label:"No B/L yet, ETA close",hint:`${e - t} days to ETA`};
   if (!sh && ms!=null && t >= ms) return {level:2,label:"Ship month. Not shipped yet",hint:`Offer said ${fM(d.shipMonth)}`};
-  if (d.kind === "offshore" && !d.millRef) return {level:2,label:"Mill PI no. missing",hint:"Type the PI no. once the mill signs"};
-  return {level:0,label:"On track", hint: rem!=null ? `Remind client on ${fDn(rem)}` : ""};
+  const nx = nextDue(d);
+  return {level:0,label:"On track", hint: rem!=null ? `Remind client on ${fDn(rem)}` : nx ? `Next due ${ymLabel(nx[0])}: ${money(nx[1])}` : ""};
 }
 
 /* ------------------------------------------------------------------ fields & actions */
@@ -568,6 +599,10 @@ const F = {
   depositOn:{l:"Deposit received on",t:"date"}, shippedOn:{l:"Shipped on",t:"date"}, bl:{l:"B/L no.",t:"text"},
   eta:{l:"ETA",t:"date"}, arrivedOn:{l:"Arrived on",t:"date"}, balanceDue:{l:"Balance due on",t:"date",h:"Empty = ETA minus the days in the terms"},
   paidOn:{l:"Paid in full on",t:"date"}, mayCancel:{l:"May cancel (from En Cours)",t:"check"},
+  clientCode:{l:"Client account no.",t:"text"}, priceNote:{l:"Price note (range, EUR…)",t:"text"}, etaNote:{l:"ETA if no exact date (e.g. JAN, TBC)",t:"text"},
+  blNote:{l:"B/L note",t:"text"}, lot:{l:"Lot",t:"text"},
+  paid:{l:"Paid so far",t:"num"}, balance:{l:"Balance still owed",t:"num"}, dues:{l:"Dues by month",t:"dues",w:1},
+  payAmt:{l:"Amount received",t:"num",req:1}, payOn:{l:"Received on",t:"date"},
   notes:{l:"Notes",t:"area",w:1}, lostReason:{l:"Why was it lost? (optional)",t:"text",w:1},
   "file:inquiry":{l:"Attach the inquiry (optional)",t:"file",cat:"inquiry"}, "file:offer":{l:"Attach the offer you sent",t:"file",cat:"offer"},
   "file:signed":{l:"Attach the signed offer",t:"file",cat:"signed"}, "file:pi":{l:"Attach the signed mill PI",t:"file",cat:"pi"},
@@ -587,6 +622,9 @@ const ACTIONS = {
     apply:v=>({...v,stage:"order"}), done:d=>`${d.ref} is now an order`},
   deposit:{title:"Deposit received", ok:"Save", fields:["depositOn","file:deposit"], defs:()=>({depositOn:today()}), apply:v=>v, done:d=>`Deposit saved for ${d.ref}`},
   shipped:{title:"Goods shipped", ok:"Save", fields:["shippedOn","bl","eta","file:shipping"], defs:()=>({shippedOn:today()}), apply:v=>({...v,shipped:true}), done:d=>`${d.ref} shipped`},
+  pay:{title:"Payment received", sub:"Adds to what the client paid, lowers the balance and the next dues. When the balance reaches 0 the deal closes as paid.", ok:"Save payment",
+    fields:["payAmt","payOn","file:payment"], defs:()=>({payOn:today()}), req:["payAmt"],
+    apply:(v,d)=>payPatch(d, num(v.payAmt), v.payOn || today()), done:d=>`Payment saved for ${d.ref}`},
   arrived:{title:"Goods arrived", ok:"Save", fields:["arrivedOn"], defs:()=>({arrivedOn:today()}), apply:v=>({...v,arrived:true}), done:d=>`${d.ref} arrived`},
   paid:{title:"Client paid in full", sub:"The deal moves to Closed.", ok:"Close deal", fields:["paidOn","file:payment"], defs:()=>({paidOn:today()}),
     apply:(v,d)=>({...v,stage:"closed",outcome:"paid",prevStage:d.stage}), done:d=>`${d.ref} paid and closed`},
@@ -605,10 +643,11 @@ const NEW = {
     defs:()=>({cur:"USD"}), req:["ref","client"], make:v=>({...v,stage:"order",kind:"offshore",millOrder:v.millOrder||v.ref})}
 };
 const EDIT_GROUPS = [
-  ["Deal",["client","contact","salesman","product","spec","qty","qtyType","dest","inqDate"]],
-  ["Offer",["ref","offerDate","cur","price","total","terms","advPct","balDays","shipMonth","validUntil","signedOn"]],
+  ["Deal",["client","clientCode","contact","salesman","product","spec","qty","qtyType","dest","lot","inqDate"]],
+  ["Offer",["ref","offerDate","cur","price","priceNote","total","terms","advPct","balDays","shipMonth","validUntil","signedOn"]],
   ["Mill & order",["millOrder","millRef","piOn","supplier","purchase","profit","port","mayCancel"]],
-  ["Payments & shipment",["depositOn","shippedOn","bl","eta","arrivedOn","balanceDue","paidOn"]],
+  ["Payments",["paid","balance","dues","depositOn","balanceDue","paidOn"]],
+  ["Shipment",["shippedOn","bl","blNote","eta","etaNote","arrivedOn"]],
   ["Notes",["notes"]]
 ];
 
@@ -696,7 +735,8 @@ function infoHTML(d) {
     L.push(`<span class="ln">${d.outcome==="cancelled"?"Cancelled":"Lost"}${d.closedOn?` <b>${esc(fD(d.closedOn))}</b>`:""}${d.lostReason?` · ${esc(d.lostReason)}`:""}</span>`);
   } else if (d.stage === "order" || d.stage === "closed") {
     const eta = d.eta ? `ETA <b>${esc(fD(d.eta))}</b>` : (d.etaNote ? esc(d.etaNote) : "No ETA yet");
-    L.push(`<span class="ln">${eta}${d.millOrder?` · <span class="mono">${esc(d.millOrder)}</span>`:""}${d.port?` · ${esc(d.port)}`:""}</span>`);
+    L.push(`<span class="ln">${eta}${d.dest?` · ${esc(d.dest)}`:d.port?` · ${esc(d.port)}`:""}</span>`);
+    const nx = nextDue(d); if (nx) L.push(`<span class="ln">Next due <b>${esc(ymLabel(nx[0]))}</b>: ${esc(money(nx[1]))}</span>`);
     L.push(`<span class="steps">${stepsHTML(d)}</span>`);
   }
   return L.join("");
@@ -719,10 +759,10 @@ function actHTML(d) {
   switch (d.stage) {
     case "inquiry": return b("makeOffer","Make offer →","primary") + b("lost","Lost","ghost");
     case "offer":   return b("signed","Client signed →","primary") + b("lost","Lost","ghost");
-    case "signed":  return b("mill","Mill confirmed →","primary") + (needsDeposit(d) ? b("deposit","Deposit paid") : "") + b("lost","Cancel","ghost");
+    case "signed":  return b("mill","Mill confirmed →","primary") + (needsDeposit(d) ? b("deposit","Deposit paid") : "") + b("pay","Payment received") + b("lost","Cancel","ghost");
     case "order": {
       const next = needsDeposit(d) ? ["deposit","Deposit paid"] : !isShipped(d) ? ["shipped","Shipped →"] : !isArrived(d) ? ["arrived","Arrived →"] : ["paid","Paid in full →"];
-      return b(next[0], next[1], "primary");
+      return b(next[0], next[1], "primary") + (balanceOf(d) > 0 ? b("pay", "Payment received") : "");
     }
     case "closed": return b("reopen","Reopen","ghost");
   }
@@ -732,7 +772,9 @@ function valHTML(d) {
   const v = value(d), q = num(d.qty);
   const sub = isFinite(q) ? `${mt(q)} MT${d.qtyType==="Min"?" min":d.qtyType==="Container"?" ~":""}` : "";
   const price = d.price!=null && d.price!=="" ? ` @ ${esc(d.price)}` : "";
-  return `<b>${money(v,d.cur)}</b><span>${esc(sub)}${price}</span>`;
+  const pn = d.priceNote ? ` (${esc(d.priceNote)})` : "";
+  const bal = d.stage !== "closed" && (d.balance != null || d.paid != null) ? `<span class="bal">Balance <b>${usd(balanceOf(d))}</b></span>` : "";
+  return `<b>${money(v,d.cur)}</b><span>${esc(sub)}${price}${pn}</span>${bal}`;
 }
 function rowHTML(d) {
   const a = d._a, lv = d.stage === "closed" ? "closed" : `l${Math.max(a.level,0)}`;
@@ -777,16 +819,17 @@ function render() {
     (S.fl ? `<button type="button" class="btn ghost sm" data-f="">Show all</button>` : "");
   const sel = $("#fs"), cur = sel.value, names = [...new Set([...S.cfg.salesmen, ...all.map(d=>d.salesman).filter(Boolean)])];
   sel.innerHTML = `<option value="">All salesmen</option>` + names.map(n => `<option ${n===cur?"selected":""}>${esc(n)}</option>`).join("");
-  const TAB_LBL = {home:"Overview", inquiry:"Inquiries", offer:"Offers", signed:"Signed", order:"Orders", closed:"Closed"};
+  const TAB_LBL = {home:"Overview", inquiry:"Inquiries", offer:"Offers", signed:"Signed", order:"Orders", clients:"Clients", closed:"Closed"};
   const urgent = st => open.filter(d => (st ? d.stage === st : true) && d._a.level === 1).length;
   $("#tabs").innerHTML = TABS.map(k => {
-    const n = k === "home" ? open.filter(d => d._a.level === 1 || d._a.level === 2).length : all.filter(d => d.stage === k).length;
-    const u = k !== "home" && k !== "closed" ? urgent(k) : 0;
+    const n = k === "home" ? open.filter(d => d._a.level === 1 || d._a.level === 2).length : k === "clients" ? new Set(open.map(d => clientKey(d.client))).size : all.filter(d => d.stage === k).length;
+    const u = k !== "home" && k !== "closed" && k !== "clients" ? urgent(k) : 0;
     return `<button type="button" data-tab="${k}" ${S.tab===k?'aria-current="page"':""}><b>${n}</b><span class="tl">${TAB_LBL[k]}${u?` <span class="dotn">${u}</span>`:""}</span></button>`;
   }).join("");
   const home = S.tab === "home";
   $("#pipe").hidden = !home; $("#attn").hidden = true; $("#tools").hidden = home;
   if (home) { $("#bands").innerHTML = overviewHTML(all, open); return; }
+  if (S.tab === "clients") { $("#tools").hidden = true; $("#bands").innerHTML = clientsHTML(open); return; }
   const s = STAGES.find(x => x.key === S.tab), inStage = all.filter(d => d.stage === s.key);
   const list = inStage.filter(visible).sort(cmp), lim = S.limit[s.key] || 80;
   const add = S.canWrite && s.add ? `<button type="button" class="btn sm primary" data-new="${s.key}">+ ${esc(s.add)}</button>` : "";
@@ -799,15 +842,15 @@ function render() {
   $("#bands").innerHTML = `<section class="band" data-stage="${s.key}"><div class="page-h"><h2>${esc(s.title)}</h2>
     <span class="meta">${inStage.length ? `${inStage.length} · ${esc(totalsText(inStage))}${filtered} · ` : ""}${esc(s.sub)}</span><span style="flex:1"></span>${inStage.length?add:""}</div>${body}</section>`;
 }
-function ovRow(d, chipLabel, cls, hint) {
-  return `<button type="button" class="ov-row" data-open="${esc(d._id)}"><span class="chip ${cls}">${esc(chipLabel)}</span><span class="c">${esc(d.client)}</span><span class="r">${esc(d.ref || ("Inq #" + (d.inqNo || "")))}</span>${hint ? `<span class="h">${esc(hint)}</span>` : ""}</button>`;
+function ovRow(d, chipLabel, cls, hint, title) {
+  return `<button type="button" class="ov-row" data-open="${esc(d._id)}"><span class="chip ${cls}">${esc(chipLabel)}</span><span class="c">${esc(title || d.client)}</span><span class="r">${esc(d.ref || ("Inq #" + (d.inqNo || "")))}</span>${hint ? `<span class="h">${esc(hint)}</span>` : ""}</button>`;
 }
 function ovGroup(title, dotCls, rows, open) {
   return `<details ${open && rows.length ? "open" : ""}><summary><span class="dot ${dotCls}"></span>${esc(title)}<span class="n">${rows.length}</span></summary>
     <div class="ov-list">${rows.join("") || `<span class="ov-empty">Nothing here.</span>`}</div></details>`;
 }
 const DOC_RULES = [
-  ["offer", "Offer sent", d => SIDX[d.stage === "closed" ? (d.prevStage || "order") : d.stage] >= 1],
+  ["offer", "Offer sent", d => SIDX[d.stage === "closed" ? (d.prevStage || "order") : d.stage] >= 1 && !!d.offerDate],
   ["signed", "Signed offer", d => SIDX[d.stage === "closed" ? (d.prevStage || "order") : d.stage] >= 2],
   ["pi", "Mill PI (signed)", d => SIDX[d.stage === "closed" ? (d.prevStage || "order") : d.stage] >= 3],
   ["deposit", "Deposit proof", d => !!d.depositOn],
@@ -828,7 +871,47 @@ function overviewHTML(all, open) {
     const miss = open.filter(applies).filter(d => !filesOf(d).some(f => f.cat === cat)).sort(cmp);
     return ovGroup(`${name} missing`, "l4", miss.map(d => ovRow(d, STAGES.find(x => x.key === d.stage).short, "lx", d.product || "")), false);
   }).join("");
-  return `<div class="ov">${actions}<section class="ov-card"><h3>Missing documents <small>deals past a step without its file</small></h3>${docs}</section></div>`;
+  return `<div class="ov">${actions}${moneyCard(open)}<section class="ov-card"><h3>Missing documents <small>deals past a step without its file</small></h3>${docs}</section></div>`;
+}
+/* one card per client, like the "client's accounts & position" statement */
+function clientsHTML(open) {
+  const by = new Map();
+  for (const d of open) { const k = clientKey(d.client); if (!by.has(k)) by.set(k, []); by.get(k).push(d); }
+  const now = ymNow();
+  const cards = [...by.values()].map(list => {
+    list.sort((a, b) => cmp(a, b));
+    const name = list[0].client, code = (list.find(d => d.clientCode) || {}).clientCode;
+    const tons = list.reduce((s, d) => s + (isFinite(num(d.qty)) ? num(d.qty) : 0), 0);
+    const tot = list.reduce((s, d) => s + value(d), 0), paid = list.reduce((s, d) => s + paidOf(d), 0), bal = list.reduce((s, d) => s + balanceOf(d), 0);
+    const months = [...new Set(list.flatMap(d => duesOf(d).map(([m]) => m)))].sort();
+    const dues = months.map(m => [m, list.reduce((s, d) => s + dueIn(d, m), 0)]);
+    const urgentN = list.filter(d => d._a.level === 1).length;
+    return {bal, html: `<section class="ov-card cl-card">
+      <h3>${esc(name)} ${code ? `<small>Account ${esc(code)}</small>` : ""}${urgentN ? `<span class="chip l1" style="margin-left:auto">${urgentN} urgent</span>` : ""}</h3>
+      <div class="cl-sum"><div><span>Deals</span><b>${list.length}</b></div><div><span>Tons</span><b>${esc(mt(Math.round(tons * 1000) / 1000))}</b></div>
+        <div><span>Total</span><b>${esc(usd(tot))}</b></div><div><span>Paid</span><b>${esc(usd(paid))}</b></div><div><span>Balance</span><b>${esc(usd(bal))}</b></div></div>
+      ${dues.length ? `<div class="cl-dues">${dues.map(([m, v]) => `<div class="${m < now ? "late" : m === now ? "now" : ""}"><span>${esc(ymLabel(m))}</span><b>${esc(money(v))}</b></div>`).join("")}</div>` : ""}
+      <div class="ov-list">${list.map(d => ovRow(d, d._a.label, d._a.level > 0 ? `l${d._a.level}` : "l0",
+        `${isFinite(num(d.qty)) ? `${mt(num(d.qty))} MT · ` : ""}ETA ${d.eta ? fD(d.eta) : (d.etaNote || "—")} · balance ${usd(balanceOf(d))}`, d.product || d.ref)).join("")}</div>
+    </section>`};
+  }).sort((a, b) => b.bal - a.bal);
+  return `<div class="page-h"><h2>Clients</h2><span class="meta">${cards.length} client${cards.length === 1 ? "" : "s"} with open deals · what each one owes and when</span></div>
+    <div class="ov">${cards.map(c => c.html).join("") || `<div class="empty"><span>No open deals.</span></div>`}</div>`;
+}
+function moneyCard(open) {
+  const now = ymNow(), owing = open.filter(d => balanceOf(d) > 0);
+  if (!owing.some(d => d.balance != null || d.paid != null || duesOf(d).length)) return "";
+  const bal = owing.reduce((s, d) => s + balanceOf(d), 0);
+  const months = [...new Set(owing.flatMap(d => duesOf(d).map(([m]) => m)))].sort();
+  const late = owing.filter(d => duesBefore(d, now) > 0);
+  const grp = (title, dot, list, amt, openIt) => ovGroup(`${title} · ${money(list.reduce((s, d) => s + amt(d), 0))}`, dot,
+    list.sort((a, b) => amt(b) - amt(a)).map(d => ovRow(d, money(amt(d)), "l0", `${d.product || ""} · ETA ${d.eta ? fD(d.eta) : (d.etaNote || "—")}`)), openIt);
+  const unsched = owing.map(d => [d, balanceOf(d) - duesOf(d).reduce((s, [, v]) => s + v, 0)]).filter(([, v]) => v > 1);
+  return `<section class="ov-card"><h3>Money to collect <small>${esc(money(bal))} still owed by clients</small></h3>
+    ${late.length ? grp("Overdue", "l1", late, d => duesBefore(d, now), true) : ""}
+    ${months.filter(m => m >= now).map(m => grp(`${ymLabel(m)}${m === now ? " (this month)" : ""}`, m === now ? "l2" : "l4", owing.filter(d => dueIn(d, m) > 0), d => dueIn(d, m), false)).join("")}
+    ${unsched.length ? ovGroup(`Not scheduled yet · ${money(unsched.reduce((s, [, v]) => s + v, 0))}`, "l4", unsched.map(([d, v]) => ovRow(d, money(v), "lx", d.terms || "")), false) : ""}
+  </section>`;
 }
 function goTab(k) {
   if (!TABS.includes(k)) k = "home";
@@ -917,6 +1000,21 @@ function kvCard(title, rows) {
   const body = rows.filter(([, v]) => v !== null && v !== undefined && v !== "" && v !== "—").map(([l, v]) => `<div class="kv"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join("");
   return body ? `<div class="kv-card"><h5>${esc(title)}</h5>${body}</div>` : "";
 }
+function duesCard(d) {
+  if (d.paid == null && d.balance == null && !duesOf(d).length) return "";
+  const ds = duesOf(d), sched = ds.reduce((s, [, v]) => s + v, 0), rest = balanceOf(d) - sched, now = ymNow();
+  const rows = ds.map(([m, v]) => `<div class="kv"><span>${esc(ymLabel(m))}${m < now ? " · overdue" : m === now ? " · this month" : ""}</span><b>${esc(money(v))}</b></div>`).join("");
+  const pays = (Array.isArray(d.payments) ? d.payments : []).map(p => `<div class="kv"><span>Received ${esc(fD(p.on))}</span><b>${esc(money(num(p.amt)))}</b></div>`).join("");
+  return `<div class="kv-card"><h5>Money</h5>
+    <div class="kv"><span>Total</span><b>${esc(money(value(d)))}</b></div>
+    <div class="kv"><span>Paid so far</span><b>${esc(usd(paidOf(d)))}</b></div>
+    <div class="kv"><span>Balance still owed</span><b>${esc(usd(balanceOf(d)))}</b></div>
+    ${d.terms ? `<div class="kv"><span>Terms</span><b>${esc(d.terms)}</b></div>` : ""}
+    ${rows ? `<h6 class="kv-sub">Dues by month</h6>${rows}` : ""}
+    ${rest > 1 && ds.length ? `<div class="kv"><span>Not scheduled yet</span><b>${esc(money(rest))}</b></div>` : ""}
+    ${pays ? `<h6 class="kv-sub">Payments recorded in the app</h6>${pays}` : ""}
+  </div>`;
+}
 function viewHTML(d) {
   const a = assess(d), v = value(d), adv = num(d.advPct), due = balanceDue(d), rem = remindOn(d, S.cfg);
   const chipCls = a.level > 0 ? `l${a.level}` : a.level === 0 ? "l0" : "lx";
@@ -930,7 +1028,7 @@ function viewHTML(d) {
   return `<div class="view">
     <div class="v-top">
       <div class="st-big"><span class="chip ${chipCls}">${esc(a.label)}</span>${a.hint ? `<small>${esc(a.hint)}</small>` : ""}<small>Stage: ${esc(stageT)}</small></div>
-      <div class="money"><div><span>Value</span><b>${money(v, d.cur)}</b></div>${adv > 0 ? `<div><span>Advance ${Math.round(adv*100)}%</span><b>${money(v*adv, d.cur)}</b></div>` : ""}${isFinite(num(d.profit)) ? `<div><span>Profit</span><b>${money(num(d.profit), d.cur)}</b></div>` : ""}</div>
+      <div class="money"><div><span>Value</span><b>${money(v, d.cur)}</b></div>${d.paid != null || d.balance != null ? `<div><span>Paid</span><b>${usd(paidOf(d))}</b></div><div><span>Balance</span><b>${usd(balanceOf(d))}</b></div>` : adv > 0 ? `<div><span>Advance ${Math.round(adv*100)}%</span><b>${money(v*adv, d.cur)}</b></div>` : ""}${isFinite(num(d.profit)) ? `<div><span>Profit</span><b>${money(num(d.profit), d.cur)}</b></div>` : ""}</div>
       <div class="qa">${quick}</div>
     </div>
     <h4 class="v-h">Progress and documents</h4>
@@ -944,10 +1042,11 @@ function viewHTML(d) {
     ${S.assets ? `<p class="note" style="margin:0">PDF or photos, up to 20 MB each. Save Word or Excel files as PDF first.</p>` : ""}
     <h4 class="v-h">Details</h4>
     <div class="kvs">
-      ${kvCard("Client", [["Client", d.client], ["Contact", d.contact], ["Salesman", d.kind === "offshore" ? (d.salesman || "Offshore desk") : d.salesman], ["Type", d.kind === "offshore" ? "Offshore" : "Local (Lebanon)"], ["Delivery / port", d.dest || d.port]])}
-      ${kvCard("Product", [["Product", d.product], ["GSM / size", d.spec], ["Quantity", qty], ["Price / MT", d.price != null && d.price !== "" ? `${d.cur === "EUR" ? "€" : "$"}${d.price}` : ""], ["Value", money(v, d.cur)], ["Purchase / MT", d.purchase != null ? `${d.cur === "EUR" ? "€" : "$"}${d.purchase}` : ""], ["Profit", isFinite(num(d.profit)) ? `${money(num(d.profit), d.cur)} (${margin})` : ""]])}
+      ${duesCard(d)}
+      ${kvCard("Client", [["Client", d.client], ["Account no.", d.clientCode], ["Contact", d.contact], ["Salesman", d.kind === "offshore" ? (d.salesman || "Offshore desk") : d.salesman], ["Type", d.kind === "offshore" ? "Offshore" : "Local (Lebanon)"], ["Delivery / port", d.dest || d.port]])}
+      ${kvCard("Product", [["Product", d.product], ["GSM / size", d.spec], ["Quantity", qty], ["Price / MT", d.price != null && d.price !== "" ? `${d.cur === "EUR" ? "€" : "$"}${d.price}` : d.priceNote || ""], ["Price note", d.price != null && d.price !== "" ? d.priceNote : ""], ["Lot", d.lot], ["Value", money(v, d.cur)], ["Purchase / MT", d.purchase != null ? `${d.cur === "EUR" ? "€" : "$"}${d.purchase}` : ""], ["Profit", isFinite(num(d.profit)) ? `${money(num(d.profit), d.cur)} (${margin})` : ""]])}
       ${kvCard("Offer and terms", [["Offer ref", d.ref], ["Offer date", fD(d.offerDate)], ["Valid until", d.validUntil ? fD(d.validUntil) : (d.stage === "offer" ? "Immediate confirmation" : "")], ["Payment terms", d.terms], ["Advance", adv > 0 ? `${Math.round(adv*100)}% = ${money(v*adv, d.cur)}` : ""], ["Shipment month", fM(d.shipMonth)]])}
-      ${kvCard("Mill and shipping", [["Mill order", d.millOrder], ["Mill PI no.", d.millRef], ["PI signed on", fD(d.piOn)], ["Mill / supplier", d.supplier], ["B/L", d.bl], ["ETA", d.eta ? fD(d.eta) : d.etaNote], ["Shipped on", fD(d.shippedOn)], ["Arrived on", fD(d.arrivedOn)]])}
+      ${kvCard("Mill and shipping", [["Mill order", d.millOrder], ["Mill PI no.", d.millRef], ["PI signed on", fD(d.piOn)], ["Mill / supplier", d.supplier], ["B/L", d.bl || d.blNote], ["B/L note", d.bl ? d.blNote : ""], ["ETA", d.eta ? fD(d.eta) : d.etaNote], ["Shipped on", fD(d.shippedOn)], ["Arrived on", fD(d.arrivedOn)]])}
       ${kvCard("Payments", [["Deposit received", fD(d.depositOn)], ["Balance", adv > 0 ? money(v*(1-adv), d.cur) : ""], ["Balance due", due != null ? fDn(due) : ""], ["Remind client on", !d.paidOn && rem != null ? fDn(rem) : ""], ["Paid in full", fD(d.paidOn)]])}
     </div>
     ${d.notes ? `<h4 class="v-h">Notes</h4><p class="v-notes">${esc(d.notes)}</p>` : ""}
@@ -1028,6 +1127,10 @@ function fieldHTML(k, v) {
     case "amt": inp = `<input type="text" inputmode="decimal" id="${id}" value="${v==null?"":esc(v)}">`; break;
     case "pct": inp = `<input type="number" step="any" min="0" max="100" inputmode="decimal" id="${id}" value="${v==null||v===""?"":esc(Math.round(num(v)*1000)/10)}" placeholder="e.g. 20">`; break;
     case "area": inp = `<textarea id="${id}">${esc(v||"")}</textarea>`; break;
+    case "dues": {
+      const rows = Object.entries(v && typeof v === "object" ? v : {}).sort().concat([["", ""], ["", ""]]);
+      inp = `<div class="dues-ed" id="${id}">${rows.map(([m, a]) => `<div class="due-row"><input type="month" value="${esc(m)}" aria-label="Month"><input type="number" step="any" inputmode="decimal" value="${a === "" ? "" : esc(a)}" placeholder="Amount" aria-label="Amount due"></div>`).join("")}</div>`;
+      break; }
     case "month": inp = `<select id="${id}">${monthOptions(v)}</select>`; break;
     case "select": inp = `<select id="${id}">${v == null || v === "" ? `<option value="" selected>—</option>` : ""}${f.o.map(([val,txt]) => `<option value="${esc(val)}" ${val===v?"selected":""}>${esc(txt)}</option>`).join("")}</select>`; break;
     case "sales": { const names = [...new Set([...S.cfg.salesmen, v].filter(x => x && x !== "To assign"))];
@@ -1041,6 +1144,7 @@ function readField(k) {
   const f = F[k]; if (f.t === "file") return undefined;
   const el = document.getElementById(`f-${k}`); if (!el) return undefined;
   if (f.t === "check") return el.checked;
+  if (f.t === "dues") { const o = {}; el.querySelectorAll(".due-row").forEach(r => { const [m, a] = r.querySelectorAll("input"); const n = Number(a.value); if (/^\d{4}-\d{2}$/.test(m.value) && a.value.trim() !== "" && isFinite(n) && n > 0) o[m.value] = n; }); return o; }
   const raw = el.value.trim();
   if (raw === "") return null;
   if (f.t === "num") { const n = Number(raw); return isFinite(n) ? n : null; }
@@ -1239,9 +1343,10 @@ async function exportExcel() {
     const rows = [...S.deals.values()].filter(d => !S.biz || kindOf(d) === S.biz).map(d => ({ ...d, _a: assess(d) })).sort((a,b) => STAGES.findIndex(s=>s.key===a.stage) - STAGES.findIndex(s=>s.key===b.stage) || cmp(a,b)).map(d => ({
       "Stage": STAGES.find(s => s.key === d.stage)?.title || d.stage, "Alert": d._a.label, "Ref / order": d.ref || "", "Type": d.kind === "offshore" ? "Offshore" : "Local",
       "Client": d.client || "", "Salesman": d.salesman || "", "Product": d.product || "", "Qty MT": isFinite(num(d.qty)) ? num(d.qty) : "", "Qty type": d.qtyType || "",
-      "Cur": d.cur || "", "Price / MT": d.price ?? "", "Value": value(d) || "", "Payment terms": d.terms || "", "Advance %": isFinite(num(d.advPct)) ? num(d.advPct) : "",
+      "Account no.": d.clientCode || "", "Cur": d.cur || "", "Price / MT": d.price ?? (d.priceNote || ""), "Value": value(d) || "", "Paid": paidOf(d) || 0, "Balance": balanceOf(d) || 0,
+      "Dues by month": duesOf(d).map(([m, v]) => `${fM(m)}: ${Math.round(v)}`).join("; "), "Payment terms": d.terms || "", "Advance %": isFinite(num(d.advPct)) ? num(d.advPct) : "",
       "Ship month": fM(d.shipMonth), "Valid until": fD(d.validUntil), "Offer date": fD(d.offerDate), "Signed on": fD(d.signedOn), "Mill order": d.millOrder || "",
-      "Mill PI no.": d.millRef || "", "PI signed on": fD(d.piOn), "Deposit on": fD(d.depositOn), "Shipped on": fD(d.shippedOn), "B/L": d.bl || "", "ETA": fD(d.eta),
+      "Mill PI no.": d.millRef || "", "PI signed on": fD(d.piOn), "Deposit on": fD(d.depositOn), "Shipped on": fD(d.shippedOn), "B/L": d.bl || d.blNote || "", "ETA": d.eta ? fD(d.eta) : (d.etaNote || ""), "Destination": d.dest || "",
       "Arrived on": fD(d.arrivedOn), "Balance due": fDn(balanceDue(d)), "Paid on": fD(d.paidOn), "Port": d.port || "", "Profit": d.profit ?? "",
       "Attachments": filesOf(d).map(f => `${CAT_NAME[f.cat]||"Other"}: ${f.name}`).join("; "), "Notes": d.notes || "" }));
     const ws = X.utils.json_to_sheet(rows), wb = X.utils.book_new();
