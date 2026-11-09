@@ -77,6 +77,8 @@ function assess(d: Deal, c: any): { level: number; label: string; hint?: string 
   if (now > 0) return { level: 2, label: "Payment due this month", hint: `${money(now)} in ${fM(ymNow())}` };
   if (!sh && e != null && e - t <= c.blWarnDays) return { level: 2, label: "No B/L yet, ETA close", hint: `${e - t} days to ETA` };
   if (!sh && ms != null && t >= ms) return { level: 2, label: "Ship month. Not shipped yet", hint: `Offer said ${fM(d.shipMonth)}` };
+  // a PI counts as signed only when the signed PI is attached (Bob, 09.11.2026)
+  if (!(Array.isArray(d.files) ? d.files : []).some((f: any) => f.cat === "pi")) return { level: 2, label: "Mill PI not signed", hint: d.millOrder ? `Order ${d.millOrder} · signed PI not attached` : "Signed PI not attached" };
   return { level: 0, label: "On track" };
 }
 
@@ -108,10 +110,11 @@ function dealChange(op: string, id: string, o: Deal | null, n: Deal | null): Msg
   if (o.stage !== n.stage) {
     if (n.stage === "closed") out.push(n.outcome === "paid" ? "Paid in full. Deal closed" : n.outcome === "cancelled" ? "Cancelled" : "Marked lost");
     else if (o.stage === "closed") out.push("Reopened");
-    else out.push({ offer: "Offer sent to the client", signed: "Client signed the offer", order: "Mill confirmed. Order placed", inquiry: "Moved back to inquiries" }[n.stage as string] || `Moved to ${n.stage}`);
+    else out.push({ offer: "Offer sent to the client", signed: "Client signed the offer", order: "Mill order placed", inquiry: "Moved back to inquiries" }[n.stage as string] || `Moved to ${n.stage}`);
   }
   if (n.depositOn && !o.depositOn) out.push("Deposit received");
-  if (n.piOn && !o.piOn) out.push("Mill PI signed");
+  const piN = (Array.isArray(n.files) ? n.files : []).some((f: any) => f.cat === "pi"), piO = (Array.isArray(o.files) ? o.files : []).some((f: any) => f.cat === "pi");
+  if (piN && !piO) out.push("Mill PI signed (attached)");
   if (isShipped(n) && !isShipped(o)) out.push(`Shipped${n.bl ? ` · B/L ${n.bl}` : ""}${n.eta ? ` · ETA ${fD(n.eta)}` : ""}`);
   else if (n.eta && o.eta && n.eta !== o.eta) out.push(`ETA changed to ${fD(n.eta)}`);
   if (isArrived(n) && !isArrived(o)) out.push("Goods arrived");

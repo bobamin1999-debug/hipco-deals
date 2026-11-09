@@ -537,6 +537,7 @@ const uErr = msg => { const e = new Error(msg); e.userMsg = msg; return e; };
 const value = d => { const t = num(d.total); if (isFinite(t)) return t; const q = num(d.qty), p = num(d.price); return isFinite(q)&&isFinite(p) ? q*p : 0; };
 const isShipped = d => !!(d.shipped || d.shippedOn || d.bl);
 const isArrived = d => !!(d.arrived || d.arrivedOn);
+const hasPI = d => (Array.isArray(d.files) ? d.files : []).some(f => f.cat === "pi");   // rule (Bob 09.11.2026): PI counts as signed only with the signed PI attached
 const needsDeposit = d => num(d.advPct) > 0 && !d.depositOn && !(num(d.paid) > 0);
 /* money owed: "paid" = received so far, "balance" = still owed, "dues" = {"2026-11": amount, ...} from the client statement */
 const ymNow = () => todayISO().slice(0, 7);
@@ -603,6 +604,7 @@ function assess(d) {
   if (now > 0) return {level:2,label:"Payment due this month",hint:`${money(now)} in ${ymLabel(ymNow())}`};
   if (!sh && e!=null && e - t <= c.blWarnDays) return {level:2,label:"No B/L yet, ETA close",hint:`${e - t} days to ETA`};
   if (!sh && ms!=null && t >= ms) return {level:2,label:"Ship month. Not shipped yet",hint:`Offer said ${fM(d.shipMonth)}`};
+  if (!hasPI(d)) return {level:2,label:"Mill PI not signed",hint:d.millOrder ? `Order ${d.millOrder} · signed PI not attached` : "Signed PI not attached"};
   const nx = nextDue(d);
   return {level:0,label:"On track", hint: rem!=null ? `Remind client on ${fDn(rem)}` : nx ? `Next due ${ymLabel(nx[0])}: ${money(nx[1])}` : ""};
 }
@@ -640,8 +642,8 @@ const today = () => todayISO();
 const ACTIONS = {
   signed:{title:"Client signed the offer", sub:"It moves to Signed, waiting for the mill.", ok:"Mark signed",
     fields:["signedOn","file:signed"], defs:()=>({signedOn:today()}), apply:v=>({...v,stage:"signed"}), done:d=>`${d.ref} signed`},
-  mill:{title:"Mill confirmed the order", sub:"Mill signed our PI. It becomes an order.", ok:"Make it an order",
-    fields:["millOrder","millRef","piOn","eta","shipMonth","file:pi"], defs:()=>({piOn:today()}), req:["millOrder"],
+  mill:{title:"Mill order placed", sub:"The order has its number (F / H). The PI only counts as signed once the signed PI is attached.", ok:"Save",
+    fields:["millOrder","millRef","eta","shipMonth","file:pi"], defs:()=>({}), req:["millOrder"],
     apply:v=>({...v,stage:"order"}), done:d=>`${d.ref} is now an order`},
   deposit:{title:"Deposit received", ok:"Save", fields:["depositOn","file:deposit"], defs:()=>({depositOn:today()}), apply:v=>v, done:d=>`Deposit saved for ${d.ref}`},
   shipped:{title:"Goods shipped", ok:"Save", fields:["shippedOn","bl","eta","file:shipping"], defs:()=>({shippedOn:today()}), apply:v=>({...v,shipped:true}), done:d=>`${d.ref} shipped`},
@@ -779,7 +781,7 @@ function actHTML(d) {
   const id = esc(d._id), b = (act, txt, cls="") => `<button type="button" class="btn sm ${cls}" data-act="${act}" data-id="${id}">${txt}</button>`;
   switch (d.stage) {
     case "offer":   return b("signed","Client signed →","primary") + b("lost","Lost","ghost");
-    case "signed":  return b("mill","Mill confirmed →","primary") + (needsDeposit(d) ? b("deposit","Deposit paid") : "") + b("pay","Payment received") + b("lost","Cancel","ghost");
+    case "signed":  return b("mill","Mill order placed →","primary") + (needsDeposit(d) ? b("deposit","Deposit paid") : "") + b("pay","Payment received") + b("lost","Cancel","ghost");
     case "order": {
       const next = needsDeposit(d) ? ["deposit","Deposit paid"] : !isShipped(d) ? ["shipped","Shipped →"] : !isArrived(d) ? ["arrived","Arrived →"] : ["paid","Paid in full →"];
       return b(next[0], next[1], "primary") + (balanceOf(d) > 0 ? b("pay", "Payment received") : "");
@@ -794,7 +796,8 @@ function valHTML(d) {
   const price = d.price!=null && d.price!=="" ? ` @ ${esc(d.price)}` : "";
   const pn = d.priceNote ? ` (${esc(d.priceNote)})` : "";
   const bal = d.stage !== "closed" && (d.balance != null || d.paid != null) ? `<span class="bal">Balance <b>${usd(balanceOf(d))}</b></span>` : "";
-  return `<b>${money(v,d.cur)}</b><span>${esc(sub)}${price}${pn}</span>${bal}`;
+  const pr = profitOf(d), pf = pr && pr.total != null ? `<span class="bal">Profit ≈ <b>${usd(pr.total)}</b> (${pr.pct}%)</span>` : pr ? `<span class="bal">Margin <b>$${pr.mt}/MT</b></span>` : "";
+  return `<b>${money(v,d.cur)}</b><span>${esc(sub)}${price}${pn}</span>${bal}${pf}`;
 }
 function rowHTML(d) {
   const a = d._a, lv = d.stage === "closed" ? "closed" : `l${Math.max(a.level,0)}`;
@@ -869,7 +872,7 @@ const isLate = d => d.stage !== "closed" && !isShipped(d) && (["Shipment late", 
 const SHIP_FILTERS = [
   ["Shipping", [
     ["late", "Late: not shipped yet", "l1", isLate],
-    ["mill", "Waiting for mill PI", "l1", d => d.stage === "signed"],
+    ["mill", "Mill PI not signed (no PI attached)", "l1", d => !hasPI(d)],
     ["noship", "Not shipped yet (no B/L)", "l4", d => d.stage === "order" && !isShipped(d)],
     ["onway", "On the way (shipped)", "l0", d => isShipped(d) && !isArrived(d)],
     ["soon", "Arriving in 30 days", "l2", d => !isArrived(d) && arrivalDay(d) != null && arrivalDay(d) - T() <= 30 && arrivalDay(d) >= T()],
@@ -904,7 +907,7 @@ function todoText(d) {
   switch (a.label) {
     case "Payment overdue": case "Balance overdue": return `Call the client: payment is late (${bal} still owed)`;
     case "Deposit not paid": return `Collect the deposit: ${money(value(d) * num(d.advPct))}`;
-    case "Mill PI not signed": return "Client signed: get the mill order / PI signed";
+    case "Mill PI not signed": return d.stage === "signed" ? "Client signed: place the mill order and get the PI signed" : "Get the mill to sign the PI, then attach it";
     case "Arrived. Client not paid": return `Goods arrived: collect ${bal}`;
     case "ETA passed. Confirm arrival": return "Confirm the goods arrived";
     case "ETA passed. Not shipped?": return "ETA passed with no B/L: check with the mill";
@@ -920,7 +923,7 @@ function todoText(d) {
 function todoRow(d) {
   const a = d._a, lv = a.level > 0 ? `l${a.level}` : "l0";
   const pay = !S.canWrite ? "" : d.stage === "offer" ? `<button type="button" class="btn sm primary" data-act="signed" data-id="${esc(d._id)}">Client signed →</button>`
-    : d.stage === "signed" ? `<button type="button" class="btn sm primary" data-act="mill" data-id="${esc(d._id)}">Mill confirmed →</button>`
+    : d.stage === "signed" ? `<button type="button" class="btn sm primary" data-act="mill" data-id="${esc(d._id)}">Mill order placed →</button>`
     : d._a.label === "Deposit not paid" ? `<button type="button" class="btn sm primary" data-act="pay" data-id="${esc(d._id)}">Deposit received</button>`
     : balanceOf(d) > 0 ? `<button type="button" class="btn sm" data-act="pay" data-id="${esc(d._id)}">Payment received</button>` : "";
   const eta = d.eta ? `ETA ${fD(d.eta)}` : d.etaNote ? `ETA ${d.etaNote}` : "";
@@ -937,7 +940,10 @@ function todoRow(d) {
 const todoSort = (a, b) => balanceOf(b) - balanceOf(a);
 const commentsOf = d => Array.isArray(d.comments) ? d.comments : [];
 /* margin from the costing: first "$NN/MT (x%)" in the margin text (direct from port when two are given); profit = margin x quantity */
+const linkedOffer = d => d.offerId ? S.deals.get(d.offerId) : null;
+const costOf = d => d.margin || d.supplier || d.purchase != null ? d : (linkedOffer(d) || {});
 function profitOf(d) {
+  const c = costOf(d); if (c !== d && c.margin) { const p = profitOf({...c, qty: isFinite(num(d.qty)) ? d.qty : c.qty}); return p && {...p, from: c}; }
   const m = String(d.margin || "").match(/\$([\d,]+)\/MT \(([\d.]+)(?:–[\d.]+)?%\)/);
   if (!m) return null;
   const mt_ = Number(m[1].replace(/,/g, "")), pct = Number(m[2]), q = num(d.qty);
@@ -1036,7 +1042,7 @@ function clientsHTML(open) {
     return {bal, html: `<section class="ov-card cl-card">
       <h3>${esc(name)} ${code ? `<small>Account ${esc(code)}</small>` : ""}${urgentN ? `<span class="chip l1" style="margin-left:auto">${urgentN} urgent</span>` : ""}</h3>
       <div class="cl-sum"><div><span>Deals</span><b>${list.length}</b></div><div><span>Tons</span><b>${esc(mt(Math.round(tons * 1000) / 1000))}</b></div>
-        <div><span>Total</span><b>${esc(usd(tot))}</b></div><div><span>Paid</span><b>${esc(usd(paid))}</b></div><div><span>Balance</span><b>${esc(usd(bal))}</b></div></div>
+        <div><span>Total</span><b>${esc(usd(tot))}</b></div>${(() => { const pf = list.reduce((x, d) => x + ((profitOf(d) || {}).total || 0), 0); return pf ? `<div><span>Profit (est.)</span><b>${esc(usd(pf))}</b></div>` : ""; })()}<div><span>Paid</span><b>${esc(usd(paid))}</b></div><div><span>Balance</span><b>${esc(usd(bal))}</b></div></div>
       ${dues.length ? `<div class="cl-dues">${dues.map(([m, v]) => `<div class="${m < now ? "late" : m === now ? "now" : ""}"><span>${esc(ymLabel(m))}</span><b>${esc(money(v))}</b></div>`).join("")}</div>` : ""}
       <div class="ov-list">${list.map(d => ovRow(d, d._a.label, d._a.level > 0 ? `l${d._a.level}` : "l0",
         `${isFinite(num(d.qty)) ? `${mt(num(d.qty))} MT · ` : ""}ETA ${d.eta ? fD(d.eta) : (d.etaNote || "—")} · balance ${usd(balanceOf(d))}`, d.product || d.ref)).join("")}</div>
@@ -1095,7 +1101,7 @@ function groupHTML(title, files, scope, ownerId, cat) {
 }
 const STEPS = [
   {k:"signed",  t:"Client signed the contract", cat:"signed", act:"signed", when:["offer"], btn:"Client signed →"},
-  {k:"pi",      t:"Mill confirmed · PI signed", cat:"pi", act:"mill", when:["signed"], btn:"Mill confirmed →"},
+  {k:"pi",      t:"Mill PI signed (attached)", cat:"pi", act:"mill", when:["signed"], btn:"Mill order placed →"},
   {k:"deposit", t:"Deposit received", cat:"deposit", act:"deposit", when:["signed","order"], btn:"Deposit paid"},
   {k:"shipped", t:"Shipped", cat:"shipping", act:"shipped", when:["order"], btn:"Mark shipped"},
   {k:"arrived", t:"Arrived", cat:null, act:"arrived", when:["order"], btn:"Mark arrived"},
@@ -1113,8 +1119,8 @@ function stepInfo(d, k) {
     case "offer": return {show:true, done: !!d.offerDate || eff >= 1, date:d.offerDate,
       meta:[d.ref, d.validUntil ? `valid until ${fD(d.validUntil)}` : "", d.terms].filter(Boolean).join(" · ")};
     case "signed": return {show:true, done: !!d.signedOn || eff >= 2, date:d.signedOn, meta:""};
-    case "pi": return {show:true, done: !!(d.piOn || d.millRef) || eff >= 3, date:d.piOn,
-      meta:[d.millOrder ? `Order ${d.millOrder}` : "", d.millRef ? `PI ${d.millRef}` : "", d.supplier].filter(Boolean).join(" · ")};
+    case "pi": return {show:true, done: hasPI(d), date:d.piOn,
+      meta:[d.millOrder ? `Order ${d.millOrder}` : "", d.millRef ? `PI ${d.millRef}` : "", hasPI(d) ? "" : "Signed PI not attached yet"].filter(Boolean).join(" · ")};
     case "deposit": return {show: adv > 0 || !!d.depositOn || has("deposit"), done: !!d.depositOn, date:d.depositOn,
       meta: adv > 0 ? `${Math.round(adv*100)}% = ${money(v*adv, d.cur)}` : ""};
     case "shipped": return {show:true, done: isShipped(d), date:d.shippedOn,
@@ -1191,6 +1197,11 @@ function viewHTML(d) {
       ${kvCard("Client", [["Client", d.client], ["Account no.", d.clientCode], ["Contact", d.contact], ["Delivery / port", d.dest || d.port]])}
       ${kvCard("Product", [["Product", d.product], ["GSM / size", d.spec], ["Quantity", qty], ["Price / MT", d.price != null && d.price !== "" ? `${d.cur === "EUR" ? "€" : "$"}${d.price}` : d.priceNote || ""], ["Price note", d.price != null && d.price !== "" ? d.priceNote : ""], ["Lot", d.lot], ["Value", money(v, d.cur)], ["Purchase / MT", d.purchase != null ? `${d.cur === "EUR" ? "€" : "$"}${d.purchase}` : ""], ["Profit", isFinite(num(d.profit)) ? `${money(num(d.profit), d.cur)} (${margin})` : ""]])}
       ${kvCard("Order and terms", [["Order / offer no.", d.ref], ["Offer date", fD(d.offerDate)], ["Contract signed", fD(d.signedOn)], ["Salesman", d.salesman], ["Payment terms", d.terms], ["Advance", adv > 0 ? `${Math.round(adv*100)}% = ${money(v*adv, d.cur)}` : ""], ["Shipment month", fM(d.shipMonth)]])}
+      ${(() => { const o = linkedOffer(d); if (!o || d.margin) return ""; const pr = profitOf(d);
+        return `<div class="kv-card"><h5>From ${esc(o.ref || "the offer")} <button type="button" class="btn sm ghost" data-open="${esc(o._id)}" style="float:right">Open offer</button></h5>
+          ${[["Supplier", o.supplier], ["Supplier price / MT", o.purchase != null ? `$${o.purchase}` : o.purchaseNote], ["Offer price / MT", o.price != null ? `$${o.price}` : o.priceNote], ["Margin", o.margin],
+             ["Estimated profit", pr && pr.total != null ? `${usd(pr.total)} (${pr.mt} $/MT x ${mt(num(d.qty))} MT)` : ""], ["Offer status in the sheet", o.offerStatus]]
+            .filter(([, v]) => v).map(([l, v]) => `<div class="kv"><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join("") || `<p class="note">No costing in the offer yet.</p>`}</div>`; })()}
       ${kvCard("Supplier and margin", [["Supplier", d.supplier], ["Supplier price / MT", d.purchase != null ? `$${d.purchase}` : d.purchaseNote], ["Supplier price note", d.purchase != null ? d.purchaseNote : ""], ["Margin", d.margin], ["Estimated profit", (() => { const pr = profitOf(d); return pr && pr.total != null ? `${usd(pr.total)} (${pr.mt} $/MT x ${mt(num(d.qty))} MT${pr.port ? ", direct from port" : ""})` : ""; })()], ["Quantity note", d.qtyNote]])}
       ${kvCard("Mill and shipping", [["Mill order", d.millOrder], ["Mill PI no.", d.millRef], ["PI signed on", fD(d.piOn)], ["Mill / supplier", d.supplier], ["B/L", d.bl || d.blNote], ["B/L note", d.bl ? d.blNote : ""], ["ETA", d.eta ? fD(d.eta) : d.etaNote], ["Shipped on", fD(d.shippedOn)], ["Arrived on", fD(d.arrivedOn)]])}
       ${kvCard("Payments", [["Deposit received", fD(d.depositOn)], ["Balance", adv > 0 ? money(v*(1-adv), d.cur) : ""], ["Balance due", due != null ? fDn(due) : ""], ["Remind client on", !d.paidOn && rem != null ? fDn(rem) : ""], ["Paid in full", fD(d.paidOn)]])}
