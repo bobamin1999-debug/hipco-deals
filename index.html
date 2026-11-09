@@ -257,6 +257,21 @@ button.st:hover{border-color:var(--brand);color:var(--brand);background:var(--sk
 .cl-dues{display:flex;flex-wrap:wrap;gap:6px;padding:8px 16px 10px}
 .cl-dues div{background:var(--sky);border-radius:8px;padding:5px 9px} .cl-dues b{font-size:13px} .cl-dues .now{outline:1.5px solid var(--amber)} .cl-dues .late{outline:1.5px solid var(--red)}
 @media (max-width:520px){.cl-sum{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.sumtiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:4px 0 16px}
+.sumtiles button{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:12px 14px;text-align:left;display:flex;flex-direction:column;gap:2px;cursor:pointer;box-shadow:var(--shadow)}
+.sumtiles span{font-size:12px;color:var(--muted)} .sumtiles b{font-family:var(--f-display);font-size:24px;color:var(--brand)}
+.sumtiles .st-red b{color:var(--red)} .sumtiles .st-amber b{color:var(--amber)}
+.todos{display:flex;flex-direction:column;gap:10px}
+.todo{display:flex;gap:12px;align-items:stretch;background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:12px 14px}
+.todo.l1{border-left-color:var(--red)} .todo.l2{border-left-color:var(--amber)} .todo.l3{border-left-color:var(--violet)}
+.todo-main{flex:1;min-width:0;border:0;background:none;text-align:left;padding:0;display:flex;flex-direction:column;gap:3px;cursor:pointer;font:inherit;color:inherit}
+.t-top{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap} .t-top b{font-size:15px} .t-top .mono{font-size:12px;color:var(--muted)}
+.t-do{font-weight:600;font-size:14.5px;color:var(--ink)} .todo.l1 .t-do{color:var(--red)}
+.t-sub{font-size:12.5px;color:var(--muted)}
+.t-side{display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:4px;text-align:right}
+.t-amt{font-weight:700;font-size:15px} .t-side small{font-size:11px;color:var(--muted)}
+@media (max-width:520px){.todo{flex-direction:column}.t-side{flex-direction:row;align-items:center;justify-content:space-between}}
+.more-week{margin:16px 0 0} .closed-box{margin-top:16px} .closed-box summary{cursor:pointer;color:var(--muted);font-weight:600;padding:8px 0}
 .ov{display:flex;flex-direction:column;gap:14px}
 .ov-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
 .ov-card > h3{margin:0;padding:12px 16px;font-family:var(--f-display);font-size:21px;color:var(--brand);border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px}
@@ -458,7 +473,7 @@ const CLIP = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-
 const S = {db:null, files:null, assets:null, downloads:null, canWrite:false, loaded:false, deals:new Map(), clients:new Map(), cfg:{...DEFAULTS},
   q:"", fs:"", fl:"", tab:"home", collapsed:{}, limit:{}, openId:null, busy:{}};
 try { const c = JSON.parse(localStorage.getItem("hipco-deals-ui")||"{}"); S.collapsed = c.collapsed||{}; S.installHidden = !!c.installHidden; S.tab = c.tab || "home"; } catch(e) {}
-const TABS = ["home","inquiry","offer","signed","order","clients","closed"];
+const TABS = ["home","week","clients","deals"];   // focus: reminders (inquiries & offers dropped, Nov 2026)
 /* phone back button: business chooser is the root; then Overview {b}, a tab {t}, an open deal {m}.
    "back" closes the deal, then returns to Overview, then to the chooser. */
 S.tab = "home"; S.biz = null;
@@ -819,28 +834,78 @@ function render() {
     (S.fl ? `<button type="button" class="btn ghost sm" data-f="">Show all</button>` : "");
   const sel = $("#fs"), cur = sel.value, names = [...new Set([...S.cfg.salesmen, ...all.map(d=>d.salesman).filter(Boolean)])];
   sel.innerHTML = `<option value="">All salesmen</option>` + names.map(n => `<option ${n===cur?"selected":""}>${esc(n)}</option>`).join("");
-  const TAB_LBL = {home:"Overview", inquiry:"Inquiries", offer:"Offers", signed:"Signed", order:"Orders", clients:"Clients", closed:"Closed"};
+  const TAB_LBL = {home:"Today", week:"This week", clients:"Clients", deals:"All deals"};
   const urgent = st => open.filter(d => (st ? d.stage === st : true) && d._a.level === 1).length;
   $("#tabs").innerHTML = TABS.map(k => {
-    const n = k === "home" ? open.filter(d => d._a.level === 1 || d._a.level === 2).length : k === "clients" ? new Set(open.map(d => clientKey(d.client))).size : all.filter(d => d.stage === k).length;
-    const u = k !== "home" && k !== "closed" && k !== "clients" ? urgent(k) : 0;
+    const n = k === "home" ? open.filter(d => d._a.level === 1).length : k === "week" ? open.filter(d => d._a.level === 2 || d._a.level === 3).length : k === "clients" ? new Set(open.map(d => clientKey(d.client))).size : open.length;
+    const u = 0;
     return `<button type="button" data-tab="${k}" ${S.tab===k?'aria-current="page"':""}><b>${n}</b><span class="tl">${TAB_LBL[k]}${u?` <span class="dotn">${u}</span>`:""}</span></button>`;
   }).join("");
-  const home = S.tab === "home";
-  $("#pipe").hidden = !home; $("#attn").hidden = true; $("#tools").hidden = home;
-  if (home) { $("#bands").innerHTML = overviewHTML(all, open); return; }
-  if (S.tab === "clients") { $("#tools").hidden = true; $("#bands").innerHTML = clientsHTML(open); return; }
-  const s = STAGES.find(x => x.key === S.tab), inStage = all.filter(d => d.stage === s.key);
-  const list = inStage.filter(visible).sort(cmp), lim = S.limit[s.key] || 80;
-  const add = S.canWrite && s.add ? `<button type="button" class="btn sm primary" data-new="${s.key}">+ ${esc(s.add)}</button>` : "";
-  const filtered = list.length !== inStage.length ? ` · showing ${list.length}` : "";
-  let body;
-  if (!inStage.length) body = `<div class="empty"><span>${esc(emptyText(s.key))}</span>${add}</div>`;
-  else if (!list.length) body = `<div class="empty"><span>No deals here match the search.</span></div>`;
-  else body = `<div class="list">${list.slice(0, lim).map(rowHTML).join("")}</div>` +
-    (list.length > lim ? `<div class="more"><button type="button" class="btn" data-more="${s.key}">Show ${list.length - lim} more</button></div>` : "");
-  $("#bands").innerHTML = `<section class="band" data-stage="${s.key}"><div class="page-h"><h2>${esc(s.title)}</h2>
-    <span class="meta">${inStage.length ? `${inStage.length} · ${esc(totalsText(inStage))}${filtered} · ` : ""}${esc(s.sub)}</span><span style="flex:1"></span>${inStage.length?add:""}</div>${body}</section>`;
+  $("#pipe").hidden = true; $("#attn").hidden = true; $("#tools").hidden = S.tab !== "deals";
+  if (S.tab === "home") { $("#bands").innerHTML = todayHTML(open); return; }
+  if (S.tab === "week") { $("#bands").innerHTML = weekHTML(open); return; }
+  if (S.tab === "clients") { $("#bands").innerHTML = clientsHTML(open); return; }
+  const list = open.filter(visible).sort(cmp), lim = S.limit.deals || 80, closed = all.filter(d => d.stage === "closed").sort(cmp);
+  const add = S.canWrite ? `<button type="button" class="btn sm primary" data-new="order">+ New order</button>` : "";
+  let body = !open.length ? `<div class="empty"><span>No open deals.</span>${add}</div>` : !list.length ? `<div class="empty"><span>No deals match the search.</span></div>`
+    : `<div class="list">${list.slice(0, lim).map(rowHTML).join("")}</div>` + (list.length > lim ? `<div class="more"><button type="button" class="btn" data-more="deals">Show ${list.length - lim} more</button></div>` : "");
+  if (closed.length) body += `<details class="closed-box"><summary>Closed deals (${closed.length}): paid or lost</summary><div class="list">${closed.map(rowHTML).join("")}</div></details>`;
+  $("#bands").innerHTML = `<section class="band" data-stage="deals"><div class="page-h"><h2>All deals</h2>
+    <span class="meta">${open.length} open · ${esc(usd(open.reduce((x, d) => x + balanceOf(d), 0)))} still owed</span><span style="flex:1"></span>${add}</div>${body}</section>`;
+}
+/* ------------------------------------------------------------------ reminders: what to do, in words */
+function todoText(d) {
+  const a = d._a, bal = usd(balanceOf(d)), now = dueIn(d, ymNow());
+  switch (a.label) {
+    case "Payment overdue": case "Balance overdue": return `Call the client: payment is late (${bal} still owed)`;
+    case "Deposit not paid": return `Collect the deposit: ${money(value(d) * num(d.advPct))}`;
+    case "Mill PI not signed": return "Client signed: get the mill order / PI signed";
+    case "Arrived. Client not paid": return `Goods arrived: collect ${bal}`;
+    case "ETA passed. Confirm arrival": return "Confirm the goods arrived";
+    case "ETA passed. Not shipped?": return "ETA passed with no B/L: check with the mill";
+    case "Shipment late": case "Ship month. Not shipped yet": return "Chase the mill for shipment";
+    case "No B/L yet, ETA close": return "Get the B/L from the mill";
+    case "Remind client to pay": return `Remind the client to pay ${bal}`;
+    case "Payment due this month": return `Follow up the ${money(now)} due this month`;
+    case "May cancel. Decide": return "Decide: keep or cancel this order";
+    default: return a.label;
+  }
+}
+function todoRow(d) {
+  const a = d._a, lv = a.level > 0 ? `l${a.level}` : "l0";
+  const pay = !S.canWrite ? "" : d.stage === "signed" ? `<button type="button" class="btn sm primary" data-act="mill" data-id="${esc(d._id)}">Mill confirmed →</button>`
+    : d._a.label === "Deposit not paid" ? `<button type="button" class="btn sm primary" data-act="pay" data-id="${esc(d._id)}">Deposit received</button>`
+    : balanceOf(d) > 0 ? `<button type="button" class="btn sm" data-act="pay" data-id="${esc(d._id)}">Payment received</button>` : "";
+  const eta = d.eta ? `ETA ${fD(d.eta)}` : d.etaNote ? `ETA ${d.etaNote}` : "";
+  return `<article class="todo ${lv}">
+    <button type="button" class="todo-main" data-open="${esc(d._id)}">
+      <span class="t-top"><b>${esc(d.client)}</b><span class="mono">${esc(d.ref || "")}</span></span>
+      <span class="t-do">${esc(todoText(d))}</span>
+      <span class="t-sub">${esc([d.product, isFinite(num(d.qty)) ? `${mt(num(d.qty))} MT` : "", eta, a.hint].filter(Boolean).join(" · "))}</span>
+    </button>
+    <div class="t-side"><span class="t-amt">${esc(usd(balanceOf(d)))}</span><small>still owed</small>${pay}</div>
+  </article>`;
+}
+const todoSort = (a, b) => balanceOf(b) - balanceOf(a);
+function todayHTML(open) {
+  const urgent = open.filter(d => d._a.level === 1).sort(todoSort), week = open.filter(d => d._a.level === 2 || d._a.level === 3);
+  const now = ymNow(), dueNow = open.reduce((x, d) => x + dueIn(d, now), 0), late = open.reduce((x, d) => x + duesBefore(d, now), 0);
+  const tiles = `<div class="sumtiles">
+    <button type="button" data-tab="home" class="st-red"><span>Do today</span><b>${urgent.length}</b></button>
+    <button type="button" data-tab="week" class="st-amber"><span>This week</span><b>${week.length}</b></button>
+    <button type="button" data-tab="clients"><span>Due in ${esc(fM(now))}</span><b>${esc(usd(dueNow))}</b></button>
+    <button type="button" data-tab="clients"><span>Still owed</span><b>${esc(usd(open.reduce((x, d) => x + balanceOf(d), 0)))}</b></button>
+    ${late > 0 ? `<button type="button" data-tab="clients" class="st-red"><span>Overdue from before</span><b>${esc(usd(late))}</b></button>` : ""}</div>`;
+  return `${tiles}<div class="page-h"><h2>Do today</h2><span class="meta">${fD(todayISO())} · urgent: late payments, missing deposits, mill not confirmed</span></div>
+    ${urgent.length ? `<div class="todos">${urgent.map(todoRow).join("")}</div>` : `<div class="empty"><span>Nothing urgent today. 👍</span></div>`}
+    ${week.length ? `<p class="more-week"><button type="button" class="btn" data-tab="week">See the ${week.length} reminder${week.length === 1 ? "" : "s"} for this week →</button></p>` : ""}`;
+}
+function weekHTML(open) {
+  const week = open.filter(d => d._a.level === 2 || d._a.level === 3).sort(todoSort);
+  const arriving = open.filter(d => d._a.level === 0 && !isArrived(d) && dn(d.eta) != null && dn(d.eta) - T() <= 7 && dn(d.eta) >= T());
+  return `<div class="page-h"><h2>This week</h2><span class="meta">reminders to send and payments to follow up</span></div>
+    ${week.length ? `<div class="todos">${week.map(todoRow).join("")}</div>` : `<div class="empty"><span>No reminders this week.</span></div>`}
+    ${arriving.length ? `<div class="page-h" style="margin-top:18px"><h2>Arriving in the next 7 days</h2></div><div class="todos">${arriving.map(todoRow).join("")}</div>` : ""}`;
 }
 function ovRow(d, chipLabel, cls, hint, title) {
   return `<button type="button" class="ov-row" data-open="${esc(d._id)}"><span class="chip ${cls}">${esc(chipLabel)}</span><span class="c">${esc(title || d.client)}</span><span class="r">${esc(d.ref || ("Inq #" + (d.inqNo || "")))}</span>${hint ? `<span class="h">${esc(hint)}</span>` : ""}</button>`;
