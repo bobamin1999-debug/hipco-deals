@@ -395,8 +395,10 @@ img{max-width:100%}
     <p id="login-msg">Sign in with the email and password Bob gave you. You only do this once on each phone.</p>
     <div class="fld" id="login-fields"><label for="l-email">Email</label><input type="email" id="l-email" autocomplete="username" inputmode="email" required></div>
     <div class="fld" id="login-pw"><label for="l-pass">Password</label><input type="password" id="l-pass" autocomplete="current-password" required></div>
+    <div class="fld" id="login-pw2" hidden><label for="l-pass2">Type the password again</label><input type="password" id="l-pass2" autocomplete="new-password"></div>
     <span class="err" id="login-err"></span>
     <button type="submit" class="btn primary" id="login-btn">Sign in</button>
+    <button type="button" class="btn ghost sm" id="login-forgot">Forgot your password?</button>
   </form>
 </section>
 
@@ -1719,8 +1721,33 @@ function showLogin(msg) {
   if (msg) $("#login-msg").textContent = msg;
   setTimeout(() => $("#l-email").focus(), 50);
 }
+/* first sign-in from an invite email, or a password reset: the person chooses their own password */
+let PW_USER = null;
+function showSetPassword(u) {
+  PW_USER = u; showLogin(`Welcome${u.email ? `, ${u.email}` : ""}. Choose your password for HIPCO Deals (at least 8 characters). You'll use it to sign in on any phone or computer.`);
+  $("#login-fields").hidden = true; $("#login-pw2").hidden = false; $("#login-forgot").hidden = true;
+  $("#l-pass").autocomplete = "new-password"; $("label[for=l-pass]").textContent = "New password"; $("#login-btn").textContent = "Save password";
+  setTimeout(() => $("#l-pass").focus(), 50);
+}
+$("#login-forgot").addEventListener("click", async () => {
+  const mail = $("#l-email").value.trim(); $("#login-err").textContent = "";
+  if (!mail) { $("#login-err").textContent = "Type your email first, then tap “Forgot your password?”."; $("#l-email").focus(); return; }
+  try { await window.HIPCO.resetPassword(mail); $("#login-msg").textContent = `If ${mail} is on the HIPCO team, an email is on its way with a link to choose a new password.`; }
+  catch (err) { $("#login-err").textContent = err.message || "Couldn't send the email. Try again."; }
+});
 $("#login-form").addEventListener("submit", async e => {
-  e.preventDefault(); const btn = $("#login-btn"); $("#login-err").textContent = ""; btn.disabled = true; btn.textContent = "Signing in…";
+  e.preventDefault(); const btn = $("#login-btn"); $("#login-err").textContent = "";
+  if (PW_USER) {
+    const p1 = $("#l-pass").value, p2 = $("#l-pass2").value;
+    if (p1.length < 8) { $("#login-err").textContent = "Use at least 8 characters."; return; }
+    if (p1 !== p2) { $("#login-err").textContent = "The two passwords don't match."; return; }
+    btn.disabled = true; btn.textContent = "Saving…";
+    try { await window.HIPCO.setPassword(p1); const u = PW_USER; PW_USER = null; $("#l-pass").value = $("#l-pass2").value = ""; toast("Password saved."); await start(u); }
+    catch (err) { $("#login-err").textContent = err.message || "Couldn't save the password. Try again."; }
+    finally { btn.disabled = false; if (PW_USER) btn.textContent = "Save password"; }
+    return;
+  }
+  btn.disabled = true; btn.textContent = "Signing in…";
   try { const u = await window.HIPCO.signIn($("#l-email").value, $("#l-pass").value); await start(u); }
   catch (err) { $("#login-err").textContent = err.message || "Couldn't sign in. Check the connection."; }
   finally { btn.disabled = false; btn.textContent = "Sign in"; }
@@ -1756,6 +1783,10 @@ async function boot() {
   if (window.HIPCO_TEST_BACKEND) { window.HIPCO = window.HIPCO_TEST_BACKEND; }
   else if (!window.HIPCO || !window.HIPCO.configured) { showLogin("This app isn't connected to its database yet. Bob is setting it up."); $("#login-fields").hidden = $("#login-pw").hidden = $("#login-btn").hidden = true; return; }
   let u = null; try { u = await window.HIPCO.session(); } catch (e) {}
+  const link = window.HIPCO.linkType;
+  if (link || window.HIPCO.linkError) try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {}
+  if (u && (link === "invite" || link === "recovery")) { showSetPassword(u); return; }
+  if (!u && window.HIPCO.linkError) { showLogin("That email link has expired or was already used. Ask Bob to send a new invite, or use “Forgot your password?”."); return; }
   if (u) start(u); else showLogin();
 }
 if ("serviceWorker" in navigator && !window.HIPCO_TEST_BACKEND) {

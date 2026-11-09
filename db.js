@@ -20,6 +20,8 @@
     return e;
   };
 
+  /* invite / password-reset links arrive as #access_token=…&type=invite|recovery (read before Supabase clears the address bar) */
+  const LINK = (() => { try { const h = new URLSearchParams(location.hash.slice(1)); return {type: h.get("type") || "", error: h.get("error_description") || ""}; } catch (e) { return {type: "", error: ""}; } })();
   let sb = null, role = LS.get("hipco-role", null), email = LS.get("hipco-email", null);
   function client() {
     if (!sb) sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, {auth: {persistSession: true, autoRefreshToken: true, storageKey: "hipco-deals-auth"}});
@@ -183,6 +185,15 @@
       const {data, error} = await timeout(client().auth.signInWithPassword({email: mail.trim(), password}));
       if (error) throw Object.assign(new Error(/invalid/i.test(error.message) ? "Wrong email or password." : error.message), {code: "auth"});
       return {email: data.user.email, id: data.user.id};
+    },
+    linkType: LINK.type, linkError: LINK.error,
+    async setPassword(password) {
+      const {error} = await timeout(client().auth.updateUser({password}));
+      if (error) throw new Error(/should be different/i.test(error.message) ? "Choose a password you haven't used before." : error.message);
+    },
+    async resetPassword(mail) {
+      const {error} = await timeout(client().auth.resetPasswordForEmail(mail.trim(), {redirectTo: location.origin + location.pathname}));
+      if (error) throw new Error(error.message);
     },
     async signOut() {
       try { await client().auth.signOut(); } catch (e) {}
