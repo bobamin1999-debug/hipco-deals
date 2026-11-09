@@ -273,7 +273,7 @@ button.st:hover{border-color:var(--brand);color:var(--brand);background:var(--sk
 @media (max-width:520px){.todo{flex-direction:column}.t-side{flex-direction:row;align-items:center;justify-content:space-between}}
 .more-week{margin:16px 0 0} .closed-box{margin-top:16px} .closed-box summary{cursor:pointer;color:var(--muted);font-weight:600;padding:8px 0}
 .t-cm{display:block;margin-top:4px;font-size:13px;color:var(--ink);background:var(--sky);border-radius:8px;padding:5px 8px} .t-cm small{color:var(--muted)}
-.fu{color:var(--violet)} .tag.ok{color:var(--green);border-color:var(--green)} .tag{font-size:11px;border:1px solid var(--line);border-radius:999px;padding:1px 7px;color:var(--muted)}
+.fu{color:var(--violet)} .t-profit{font-weight:700;color:var(--green);font-size:14px;margin-top:4px} .tag.ok{color:var(--green);border-color:var(--green)} .tag{font-size:11px;border:1px solid var(--line);border-radius:999px;padding:1px 7px;color:var(--muted)}
 .cms{display:flex;flex-direction:column;gap:8px} .cm{background:var(--sky);border-radius:10px;padding:8px 12px} .cm p{margin:0;font-size:14px;white-space:pre-wrap} .cm small{color:var(--muted);font-size:11.5px}
 .cm-add{display:flex;gap:8px;align-items:flex-end;margin-top:8px} .cm-add textarea{flex:1;font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;resize:vertical}
 .sf{display:flex;flex-direction:column;gap:12px;margin:4px 0 14px}
@@ -936,6 +936,14 @@ function todoRow(d) {
 }
 const todoSort = (a, b) => balanceOf(b) - balanceOf(a);
 const commentsOf = d => Array.isArray(d.comments) ? d.comments : [];
+/* margin from the costing: first "$NN/MT (x%)" in the margin text (direct from port when two are given); profit = margin x quantity */
+function profitOf(d) {
+  const m = String(d.margin || "").match(/\$([\d,]+)\/MT \(([\d.]+)(?:–[\d.]+)?%\)/);
+  if (!m) return null;
+  const mt_ = Number(m[1].replace(/,/g, "")), pct = Number(m[2]), q = num(d.qty);
+  const multi = /CF .*CFB|Ocean:.*Era:/.test(d.margin || "");
+  return {mt: mt_, pct, total: !multi && isFinite(q) ? Math.round(mt_ * q) : null, port: /direct from port/.test(d.margin || "")};
+}
 function lastComment(d) { const c = commentsOf(d).slice(-1)[0]; return c ? `<span class="t-cm">💬 ${esc(c.text)} <small>${esc(fD(c.on))}</small></span>` : ""; }
 /* pending offers: one card each, newest first */
 function offersHTML(list) {
@@ -954,10 +962,10 @@ function offersHTML(list) {
         <span class="t-sub">Sent ${esc(fD(d.offerDate))}${n != null ? ` · ${n} day${n === 1 ? "" : "s"} ago` : ""}${d._a.level === 3 ? " · <b class=\"fu\">follow up</b>" : ""}</span>
         ${lastComment(d)}
       </button>
-      <div class="t-side"><span class="t-amt">${esc(price)}</span><small>offer price</small>${btn}</div>
+      <div class="t-side"><span class="t-amt">${esc(price)}</span><small>offer price</small>${(() => { const pr = profitOf(d); return pr ? `<span class="t-profit">${pr.total != null ? `Profit ≈ ${esc(usd(pr.total))}` : `Margin $${pr.mt}/MT`}</span><small>${pr.pct}% margin</small>` : ""; })()}${btn}</div>
     </article>`;
   };
-  return `<div class="page-h"><h2>Pending offers</h2><span class="meta">${list.length} offers from the pending-offers sheet · kept separate from the client statement</span><span style="flex:1"></span>${add}</div>
+  return `<div class="page-h"><h2>Pending offers</h2><span class="meta">${list.length} offers from the pending-offers sheet · kept separate from the client statement${(() => { const t = list.reduce((x, d) => x + ((profitOf(d) || {}).total || 0), 0); return t ? ` · expected profit if all are signed ≈ ${esc(usd(t))}` : ""; })()}</span><span style="flex:1"></span>${add}</div>
     ${list.length ? `<div class="todos">${list.map(card).join("").replace(/&lt;b class=&quot;fu&quot;&gt;follow up&lt;\/b&gt;/g, '<b class="fu">follow up</b>')}</div>` : `<div class="empty"><span>No pending offers.</span>${add}</div>`}`;
 }
 function todayHTML(open) {
@@ -1165,7 +1173,7 @@ function viewHTML(d) {
   return `<div class="view">
     <div class="v-top">
       <div class="st-big"><span class="chip ${chipCls}">${esc(a.label)}</span>${a.hint ? `<small>${esc(a.hint)}</small>` : ""}<small>Stage: ${esc(stageT)}</small></div>
-      <div class="money"><div><span>Value</span><b>${money(v, d.cur)}</b></div>${d.paid != null || d.balance != null ? `<div><span>Paid</span><b>${usd(paidOf(d))}</b></div><div><span>Balance</span><b>${usd(balanceOf(d))}</b></div>` : adv > 0 ? `<div><span>Advance ${Math.round(adv*100)}%</span><b>${money(v*adv, d.cur)}</b></div>` : ""}${isFinite(num(d.profit)) ? `<div><span>Profit</span><b>${money(num(d.profit), d.cur)}</b></div>` : ""}</div>
+      <div class="money"><div><span>Value</span><b>${money(v, d.cur)}</b></div>${(() => { const pr = profitOf(d); return pr ? `<div><span>Margin</span><b>$${pr.mt}/MT · ${pr.pct}%</b></div>${pr.total != null ? `<div><span>Profit (est.)</span><b>${usd(pr.total)}</b></div>` : ""}` : ""; })()}${d.paid != null || d.balance != null ? `<div><span>Paid</span><b>${usd(paidOf(d))}</b></div><div><span>Balance</span><b>${usd(balanceOf(d))}</b></div>` : adv > 0 ? `<div><span>Advance ${Math.round(adv*100)}%</span><b>${money(v*adv, d.cur)}</b></div>` : ""}${isFinite(num(d.profit)) ? `<div><span>Profit</span><b>${money(num(d.profit), d.cur)}</b></div>` : ""}</div>
       <div class="qa">${quick}</div>
     </div>
     <h4 class="v-h">Progress and documents</h4>
@@ -1183,7 +1191,7 @@ function viewHTML(d) {
       ${kvCard("Client", [["Client", d.client], ["Account no.", d.clientCode], ["Contact", d.contact], ["Delivery / port", d.dest || d.port]])}
       ${kvCard("Product", [["Product", d.product], ["GSM / size", d.spec], ["Quantity", qty], ["Price / MT", d.price != null && d.price !== "" ? `${d.cur === "EUR" ? "€" : "$"}${d.price}` : d.priceNote || ""], ["Price note", d.price != null && d.price !== "" ? d.priceNote : ""], ["Lot", d.lot], ["Value", money(v, d.cur)], ["Purchase / MT", d.purchase != null ? `${d.cur === "EUR" ? "€" : "$"}${d.purchase}` : ""], ["Profit", isFinite(num(d.profit)) ? `${money(num(d.profit), d.cur)} (${margin})` : ""]])}
       ${kvCard("Order and terms", [["Order / offer no.", d.ref], ["Offer date", fD(d.offerDate)], ["Contract signed", fD(d.signedOn)], ["Salesman", d.salesman], ["Payment terms", d.terms], ["Advance", adv > 0 ? `${Math.round(adv*100)}% = ${money(v*adv, d.cur)}` : ""], ["Shipment month", fM(d.shipMonth)]])}
-      ${kvCard("Supplier and margin", [["Supplier", d.supplier], ["Supplier price / MT", d.purchase != null ? `$${d.purchase}` : d.purchaseNote], ["Supplier price note", d.purchase != null ? d.purchaseNote : ""], ["Margin", d.margin], ["Quantity note", d.qtyNote]])}
+      ${kvCard("Supplier and margin", [["Supplier", d.supplier], ["Supplier price / MT", d.purchase != null ? `$${d.purchase}` : d.purchaseNote], ["Supplier price note", d.purchase != null ? d.purchaseNote : ""], ["Margin", d.margin], ["Estimated profit", (() => { const pr = profitOf(d); return pr && pr.total != null ? `${usd(pr.total)} (${pr.mt} $/MT x ${mt(num(d.qty))} MT${pr.port ? ", direct from port" : ""})` : ""; })()], ["Quantity note", d.qtyNote]])}
       ${kvCard("Mill and shipping", [["Mill order", d.millOrder], ["Mill PI no.", d.millRef], ["PI signed on", fD(d.piOn)], ["Mill / supplier", d.supplier], ["B/L", d.bl || d.blNote], ["B/L note", d.bl ? d.blNote : ""], ["ETA", d.eta ? fD(d.eta) : d.etaNote], ["Shipped on", fD(d.shippedOn)], ["Arrived on", fD(d.arrivedOn)]])}
       ${kvCard("Payments", [["Deposit received", fD(d.depositOn)], ["Balance", adv > 0 ? money(v*(1-adv), d.cur) : ""], ["Balance due", due != null ? fDn(due) : ""], ["Remind client on", !d.paidOn && rem != null ? fDn(rem) : ""], ["Paid in full", fD(d.paidOn)]])}
     </div>
