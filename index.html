@@ -285,6 +285,12 @@ button.st:hover{border-color:var(--brand);color:var(--brand);background:var(--sk
 .sf-chip.on{border-color:var(--brand);background:var(--sky);outline:2px solid var(--brand)} .sf-chip.zero{opacity:.55}
 .sf-on{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:var(--sky);border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:14px}
 @media (max-width:520px){.sf-chips{grid-template-columns:1fr 1fr}.sf-chip{padding:10px}.sf-chip .sf-l{font-size:13px}}
+.todo:has(.fu-box){flex-wrap:wrap} .fu-box{flex:1 1 100%;border-top:1px dashed var(--line);margin-top:10px;padding-top:8px}
+.fu-box h6{margin:0 0 4px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.fu-list{list-style:none;margin:0 0 6px;padding:0;display:flex;flex-direction:column;gap:4px}
+.fu-list li{background:var(--sky);border-radius:8px;padding:6px 9px;font-size:13.5px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 10px}
+.fu-list small{color:var(--muted);font-size:11.5px;white-space:nowrap} .fu-list .fu-more{background:none;padding:0 2px;font-size:12.5px;color:var(--muted)}
+.fu-add{display:flex;gap:8px} .fu-add input{flex:1;min-width:0;font:inherit;font-size:16px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink)}
 .btn.wa{background:#1f9d55;border-color:#1f9d55;color:#fff;text-decoration:none;text-align:center} .btn.wa:hover{background:#17834a}
 .pl-q{width:100%;font:inherit;font-size:15px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin:2px 0 12px;background:var(--surface);color:var(--ink)}
 .pl-seg{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:5px;margin:0 0 16px;box-shadow:var(--shadow)}
@@ -845,6 +851,14 @@ function totalsText(list) {
 }
 
 function render() {
+  S.keep = S.keep || {};
+  const act = document.activeElement, focus = act && act.dataset && act.dataset.keep ? [act.dataset.keep, act.selectionStart] : null;
+  document.querySelectorAll("[data-keep]").forEach(el => { if (el.value) S.keep[el.dataset.keep] = el.value; else delete S.keep[el.dataset.keep]; });
+  renderInner();
+  document.querySelectorAll("[data-keep]").forEach(el => { if (S.keep[el.dataset.keep] != null) el.value = S.keep[el.dataset.keep]; });
+  if (focus) { const el = document.querySelector(`[data-keep="${CSS.escape(focus[0])}"]`); if (el) { el.focus(); try { el.setSelectionRange(focus[1], focus[1]); } catch (e) {} } }
+}
+function renderInner() {
   renderChooser();
   if (!S.biz) return;
   const all = [...S.deals.values()].filter(d => kindOf(d) === S.biz);
@@ -1098,6 +1112,14 @@ function waLink(d) {
     "Did the client reply? Any feedback on the price, or anything we should change?", "", "Thanks"].join("\n");
   return `<a class="btn sm wa" href="https://wa.me/${tel}?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener" title="Ask ${esc(first)} on WhatsApp what happened with this offer">WhatsApp ${esc(first)}</a>`;
 }
+/* follow-up notes under each offer (same comments as the deal page) */
+const who = by => { const b = String(by || ""), nm = (S.cfg && S.cfg.names) || {}; if (nm[b.toLowerCase()]) return nm[b.toLowerCase()]; return b.includes("@") ? b.split("@")[0].replace(/[._-]?\d+$/, "").replace(/^./, c => c.toUpperCase()) : b; };
+function followHTML(d) {
+  const cs = commentsOf(d), last = cs.slice(-3);
+  const list = last.length ? `<ul class="fu-list">${cs.length > 3 ? `<li class="fu-more"><button type="button" class="linkish" data-open="${esc(d._id)}">${cs.length - 3} earlier note${cs.length - 3 === 1 ? "" : "s"} →</button></li>` : ""}${last.map(c => `<li><span>${esc(c.text)}</span><small>${esc(fD(c.on))}${c.by ? ` · ${esc(who(c.by))}` : ""}</small></li>`).join("")}</ul>` : "";
+  const add = S.canWrite ? `<div class="fu-add"><input type="text" data-keep="fu-${esc(d._id)}" id="fu-${esc(d._id)}" placeholder="Write the follow-up: what the salesman / client said…" aria-label="Follow-up note for ${esc(d.ref || d.client || "")}"><button type="button" class="btn sm primary" data-cmadd="${esc(d._id)}" data-box="fu-${esc(d._id)}">Save</button></div>` : "";
+  return list || add ? `<div class="fu-box"><h6>Follow-up</h6>${list}${add}</div>` : "";
+}
 function offersHTML(list) {
   const days = d => d.offerDate ? T() - dn(d.offerDate) : null;
   list.sort((a, b) => (b.offerDate || "").localeCompare(a.offerDate || ""));
@@ -1112,9 +1134,9 @@ function offersHTML(list) {
         <span class="t-do">${esc(d.product || "")}${qty ? ` · ${esc(qty)}` : ""}</span>
         <span class="t-sub">${esc([d.dest, d.supplier ? `Supplier: ${d.supplier}` : "", d.margin ? `Margin ${d.margin}` : ""].filter(Boolean).join(" · "))}</span>
         <span class="t-sub">Sent ${esc(fD(d.offerDate))}${n != null ? ` · ${n} day${n === 1 ? "" : "s"} ago` : ""}${d._a.level === 3 ? " · <b class=\"fu\">follow up</b>" : ""}</span>
-        ${lastComment(d)}
       </button>
       <div class="t-side"><span class="t-amt">${esc(price)}</span><small>offer price</small>${(() => { const pr = profitOf(d); return pr ? `<span class="t-profit">${pr.total != null ? `Profit ≈ ${esc(usd(pr.total))}` : `Margin $${pr.mt}/MT`}</span><small>${pr.pct}% margin</small>` : ""; })()}${waLink(d)}${btn}</div>
+      ${followHTML(d)}
     </article>`;
   };
   return `<div class="page-h"><h2>Pending offers</h2><span class="meta">${list.length} offers from the pending-offers sheet · kept separate from the client statement${(() => { const t = list.reduce((x, d) => x + ((profitOf(d) || {}).total || 0), 0); return t ? ` · expected profit if all are signed ≈ ${esc(usd(t))}` : ""; })()}</span><span style="flex:1"></span>${add}</div>
@@ -1478,10 +1500,11 @@ function closeModal() { const was = !$("#scrim").hidden; hideModal(); if (was &&
 $("#m-back").addEventListener("click", () => closeModal());
 document.addEventListener("click", async e => {
   const b = e.target.closest("[data-cmadd]"); if (!b) return;
-  const id = b.dataset.cmadd, d = S.deals.get(id), box = $("#cm-text"), text = box ? box.value.trim() : "";
+  const id = b.dataset.cmadd, d = S.deals.get(id), box = b.dataset.box ? document.getElementById(b.dataset.box) : $("#cm-text"), text = box ? box.value.trim() : "";
   if (!d || !text) { if (box) box.focus(); return; }
   b.disabled = true;
-  try { await patch(id, {comments: [...commentsOf(d), {on: today(), by: S.me || "", text}]}); box.value = ""; toast("Comment added"); }
+  try { const keep = box.dataset.keep; box.value = ""; if (keep && S.keep) delete S.keep[keep];
+    await patch(id, {comments: [...commentsOf(d), {on: today(), by: S.me || "", text}]}); toast(keep ? "Follow-up saved" : "Comment added"); }
   catch (err) { writeFail(err); } finally { b.disabled = false; }
 });
 $("#bizsw").addEventListener("click", () => { const st = history.state || {}; if (st.b) { try { history.go(st.t ? -2 : -1); return; } catch (e) {} } showChooser(); });
@@ -1499,6 +1522,7 @@ window.addEventListener("popstate", () => {
 $("#m-cancel").addEventListener("click", () => { if (MODAL && MODAL.onCancel) MODAL.onCancel(); else closeModal(); });
 $("#scrim").addEventListener("click", e => { if (e.target.id === "scrim") closeModal(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && MODAL) closeModal(); });
+document.addEventListener("keydown", e => { if (e.key !== "Enter" || !e.target.matches(".fu-add input")) return; e.preventDefault(); const b = e.target.parentElement.querySelector("[data-cmadd]"); if (b && !b.disabled) b.click(); });
 $("#m-form").addEventListener("submit", async e => {
   e.preventDefault(); if (!MODAL) return;
   const btn = $("#m-ok"), label = btn.textContent, M = MODAL; btn.disabled = true;
