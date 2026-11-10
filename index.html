@@ -1089,7 +1089,13 @@ function phoneOf(name) {
 function waLink(d) {
   const who = String(d.salesman || "").trim(), tel = phoneOf(who); if (!tel) return "";
   const first = who.split(/\s+/)[0];
-  const msg = `Hi ${first}, any update on ${d.ref || "the offer"} for ${d.client || "the client"}${d.product ? ` (${d.product})` : ""}${d.offerDate ? `, sent on ${fD(d.offerDate)}` : ""}? What did the client say? Thanks`;
+  const age = d.offerDate ? T() - dn(d.offerDate) : null;
+  const price = d.price != null && d.price !== "" ? `$${num(d.price).toLocaleString("en-US")}/MT` : (d.priceNote || "");
+  const qty = isFinite(num(d.qty)) ? `${mt(num(d.qty))} MT` : (d.qtyNote || "");
+  const rows = [["Client", d.client], ["Product", d.product], ["Quantity", qty], ["Price", price], ["Delivery", d.dest],
+    ["Sent", d.offerDate ? `${fD(d.offerDate)}${age != null ? ` (${age} day${age === 1 ? "" : "s"} ago)` : ""}` : ""]].filter(([, v]) => v);
+  const msg = [`Hi ${first},`, "", `Quick follow-up on *${d.ref || "this offer"}*:`, "", ...rows.map(([l, v]) => `• ${l}: ${v}`), "",
+    "Did the client reply? Any feedback on the price, or anything we should change?", "", "Thanks"].join("\n");
   return `<a class="btn sm wa" href="https://wa.me/${tel}?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener" title="Ask ${esc(first)} on WhatsApp what happened with this offer">WhatsApp ${esc(first)}</a>`;
 }
 function offersHTML(list) {
