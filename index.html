@@ -423,7 +423,7 @@ img{max-width:100%}
     <div class="brand">
       <img src="icons/logo.png" alt="HIPCO, Hammoud International Paper SAL" width="118" height="44">
       <div class="ttl">
-        <h1><span id="biz-name">Offshore deals</span><button type="button" class="bizsw" id="bizsw" hidden>Switch</button></h1>
+        <h1><span id="biz-name">Deals</span><button type="button" class="bizsw" id="bizsw">Switch</button></h1>
         <p id="sub">Inquiry → offer → signed → order → paid</p>
       </div>
     </div>
@@ -687,10 +687,10 @@ const ACTIONS = {
 const NEW = {
   offer:{title:"New offer", sub:"An offer sent to a client, waiting for an answer.",
     fields:["ref","offerDate","client","salesman","dest","product","qty","qtyNote","cur","price","priceNote","supplier","purchase","margin","notes","file:offer"],
-    defs:()=>({offerDate:today(),cur:"USD"}), req:["ref","client"], make:v=>({...v,stage:"offer",kind:"offshore"})},
+    defs:()=>({offerDate:today(),cur:"USD"}), req:["ref","client"], make:v=>({...v,stage:"offer",kind:S.biz || "offshore"})},
   order:{title:"New order", sub:"A signed client order (F or H number).",
     fields:["ref","client","clientCode","dest","supplier","product","qty","cur","price","total","terms","advPct","balDays","dues","signedOn","millRef","eta","etaNote","notes","file:signed","file:pi"],
-    defs:()=>({cur:"USD"}), req:["ref","client"], make:v=>({...v,stage:"order",kind:"offshore",millOrder:v.millOrder||v.ref})}
+    defs:()=>({cur:"USD"}), req:["ref","client"], make:v=>({...v,stage:"order",kind:S.biz || "offshore",millOrder:v.millOrder||v.ref})}
 };
 const EDIT_GROUPS = [
   ["Deal",["client","clientCode","contact","product","spec","qty","qtyType","dest","lot"]],
@@ -1515,7 +1515,7 @@ window.addEventListener("popstate", () => {
     return;
   }
   if (!$("#scrim").hidden) { hideModal(); return; }   // phone back while a deal is open: close it
-  if (!(history.state && history.state.b)) { if (S.tab !== "home") { S.tab = "home"; S.fl = ""; saveUI(); render(); window.scrollTo({top: 0}); } return; }   // back to Overview (the app's first page)
+  if (!(history.state && history.state.b)) { if (S.biz) showChooser(); return; }   // back from Today: business chooser
   const h = location.hash.slice(1), k = TABS.includes(h) ? h : "home";
   if (k !== S.tab) { S.tab = k; if (k !== "home") S.fl = ""; saveUI(); render(); window.scrollTo({top: 0}); }
 });
@@ -1731,6 +1731,7 @@ async function enableAlerts() {
 $("#bell").addEventListener("click", enableAlerts);
 function openDeal(id) {
   const d = S.deals.get(id); if (!d) return false;
+  if (S.biz !== kindOf(d)) chooseBiz(kindOf(d));
   showView(id);
   if (OPEN_CAT) { const cat = OPEN_CAT; OPEN_CAT = null; setTimeout(() => pointAttach(cat), 400); }
   return true;
@@ -1804,8 +1805,7 @@ async function start(u) {
   const B = window.HIPCO.connect();
   S.db = B.db; S.files = B.files; S.assets = B.assets; S.downloads = B.downloads;
   S.canWrite = await B.user.canEdit();
-  $("#login").hidden = true; $("#biz").hidden = true; $("#app").hidden = false;
-  S.biz = "offshore"; S.tab = "home";   // HIPCO tracks only the offshore business here (Beirut business dropped, Nov 2026)
+  $("#login").hidden = true; showChooser();   // Beirut and offshore kept separate: choose one first (Beirut back, Nov 2026)
   S.me = B.user.email() || u.email;
   $("#acct").textContent = `Signed in as ${S.me}`;
   setMode(); renderSettings(); showInstall(); setBell();

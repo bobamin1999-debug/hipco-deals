@@ -1,7 +1,7 @@
 # HIPCO Deals
 
 HIPCO's deal tracker as a phone app (installs from the browser with "Add to Home Screen").
-Offshore business only (Beirut business, inquiries and offers dropped in Nov 2026). The app is built around reminders: **Today · This week · Clients · All deals**.
+Two separate businesses: **Beirut** and **Offshore**. The app opens on "Which business?" (Beirut back since 13.11.2026; inquiries dropped Nov 2026). Tabs: **Today · This week · Offers · Clients · Shipments · Prices**.
 Tap a deal to see its progress, documents and details. Built and operated by Claude for Bob (Ibrahim Amin).
 
 ## How it works
