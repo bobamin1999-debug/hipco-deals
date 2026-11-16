@@ -45,6 +45,7 @@ const remindOn = (d: Deal, c: any) => { const e = dn(d.eta), b = balanceDue(d);
 
 function assess(d: Deal, c: any): { level: number; label: string; hint?: string } {
   const t = dn(todayISO())!, st = d.stage;
+  if (st === "signed" && d.sheet === "pending-offers") return { level: 0, label: "Signed" };   // pending-offers sheet: tracked in the Offers tab only
   if (st === "closed") return { level: -1, label: "Closed" };
   if (st === "inquiry") {
     const a = d.inqDate ? t - dn(d.inqDate)! : 0;

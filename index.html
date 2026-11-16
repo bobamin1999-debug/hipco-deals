@@ -296,7 +296,7 @@ button.st:hover{border-color:var(--brand);color:var(--brand);background:var(--sk
 .pl-seg{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:5px;margin:0 0 16px;box-shadow:var(--shadow)}
 .pl-seg button{border:0;border-radius:9px;background:transparent;padding:10px 8px;font:inherit;font-weight:700;font-size:15px;color:var(--ink);display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer}
 .pl-seg button small{font-weight:500;font-size:11.5px;color:var(--muted)} .pl-seg button[aria-selected="true"]{background:var(--brand);color:#fff} .pl-seg button[aria-selected="true"] small{color:#dbe4ff}
-.pl-chips{margin-bottom:14px} .pl-h{margin-top:18px} .pl-h h3{margin:0;font-family:var(--f-display);font-size:20px;color:var(--brand)}
+.pl-chips{margin-bottom:14px} .of-chips{margin:0 0 14px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px} .of-chips .sf-chip{min-width:0} .pl-h{margin-top:18px} .pl-h h3{margin:0;font-family:var(--f-display);font-size:20px;color:var(--brand)}
 .pl-forms{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 2px} .pl-forms span{background:var(--sky);border-radius:8px;padding:4px 9px;font-weight:700;font-size:14px;font-variant-numeric:tabular-nums}
 .pl-forms small{font-weight:500;color:var(--muted);font-size:11.5px;margin-right:5px}
 .pl-sug{margin-bottom:22px} .pl-sug summary{list-style:none;cursor:pointer;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px} .pl-sug summary::-webkit-details-marker{display:none}
@@ -565,6 +565,9 @@ const value = d => { const t = num(d.total); if (isFinite(t)) return t; const q 
 const isShipped = d => !!(d.shipped || d.shippedOn || d.bl);
 const isArrived = d => !!(d.arrived || d.arrivedOn);
 // rule (Bob 09.11.2026): PI counts as signed only with the signed PI attached, or once the goods have a B/L / shipped / arrived
+/* the pending-offers sheet stays in the Offers tab even after the client signs (Bob, 16.11.2026) */
+const isSheet = d => d.sheet === "pending-offers";
+const inOffers = d => d.stage === "offer" || (isSheet(d) && d.stage === "signed");
 const hasPI = d => (Array.isArray(d.files) ? d.files : []).some(f => f.cat === "pi") || isShipped(d) || isArrived(d);
 const needsDeposit = d => num(d.advPct) > 0 && !d.depositOn && !(num(d.paid) > 0);
 /* money owed: "paid" = received so far, "balance" = still owed, "dues" = {"2026-11": amount, ...} from the client statement */
@@ -599,6 +602,7 @@ const clientFiles = d => { const c = S.clients.get(clientKey(d.client)); return 
 /* ------------------------------------------------------------------ alerts */
 function assess(d) {
   const c = S.cfg, t = T(), st = d.stage;
+  if (st === "signed" && d.sheet === "pending-offers") return {level:0,label:"Signed"};
   if (st === "closed") return d.outcome==="paid" ? {level:0,label:"Paid · closed"} : {level:-1,label:d.outcome==="cancelled"?"Cancelled":"Lost"};
   if (st === "inquiry") {
     const a = d.inqDate ? t - dn(d.inqDate) : 0;
@@ -879,7 +883,7 @@ function renderInner() {
   const TAB_LBL = {home:"Today", week:"This week", offers:"Offers", clients:"Clients", deals:"Shipments", prices:"Prices"};
   const urgent = st => open.filter(d => (st ? d.stage === st : true) && d._a.level === 1).length;
   $("#tabs").innerHTML = TABS.map(k => {
-    const nonOffer = open.filter(d => d.stage !== "offer");
+    const nonOffer = open.filter(d => !inOffers(d));
     const n = k === "home" ? nonOffer.filter(d => d._a.level === 1).length : k === "week" ? nonOffer.filter(d => d._a.level === 2 || d._a.level === 3).length : k === "offers" ? open.filter(d => d.stage === "offer").length : k === "prices" ? plRows("current").length : k === "clients" ? new Set(open.filter(d => d.stage !== "offer").map(d => clientKey(d.client))).size : open.filter(d => d.stage !== "offer").length;
     const u = 0;
     return `<button type="button" data-tab="${k}" ${S.tab===k?'aria-current="page"':""}><b>${n}</b><span class="tl">${TAB_LBL[k]}${u?` <span class="dotn">${u}</span>`:""}</span></button>`;
@@ -887,10 +891,10 @@ function renderInner() {
   $("#pipe").hidden = true; $("#attn").hidden = true; $("#tools").hidden = S.tab !== "deals";
   if (S.tab === "home") { $("#bands").innerHTML = todayHTML(open); return; }
   if (S.tab === "week") { $("#bands").innerHTML = weekHTML(open); return; }
-  if (S.tab === "offers") { $("#bands").innerHTML = offersHTML(open.filter(d => d.stage === "offer")); return; }
-  if (S.tab === "clients") { $("#bands").innerHTML = clientsHTML(open.filter(d => d.stage !== "offer")); return; }
+  if (S.tab === "offers") { $("#bands").innerHTML = offersHTML(open.filter(inOffers)); return; }
+  if (S.tab === "clients") { $("#bands").innerHTML = clientsHTML(open.filter(d => !inOffers(d))); return; }
   if (S.tab === "prices") { $("#bands").innerHTML = pricesHTML(open); return; }
-  $("#bands").innerHTML = shipmentsHTML(open.filter(d => d.stage !== "offer"), all.filter(d => d.stage === "closed"));
+  $("#bands").innerHTML = shipmentsHTML(open.filter(d => !inOffers(d)), all.filter(d => d.stage === "closed"));
 }
 /* ------------------------------------------------------------------ shipments: nearest arrival first, with filters */
 const MONTH_IX = {JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
@@ -1007,7 +1011,7 @@ function suggestHTML(d, compact) {
   return `<p class="sg-now">${esc(now)}</p>${body}
     <p class="note sg-foot">Supplier prices from the price list of 02.11.2026${isFinite(s.sale) && /karbala|baghdad/i.test(d.dest || "") ? " · margin is before inland transport to Iraq" : " · margin is before any extra costs"}. Reconfirm with the supplier before offering.</p>`;
 }
-const waitingPI = open => open.filter(d => (d.stage === "order" || d.stage === "signed") && !hasPI(d));
+const waitingPI = open => open.filter(d => (d.stage === "order" || d.stage === "signed") && !isSheet(d) && !hasPI(d));
 function pricesHTML(open) {
   if (!S.prices.current) return `<div class="page-h"><h2>Price list</h2></div><div class="empty"><span>The price list isn't loaded yet.</span></div>`;
   const which = S.pOld ? "older" : "current", rows = plRows(which), q = S.pq || "";
@@ -1041,6 +1045,7 @@ document.addEventListener("click", e => {
   if (b.dataset.pold) { S.pOld = !S.pOld; S.pf = ""; } else S.pf = b.dataset.pf;
   render();
 });
+document.addEventListener("click", e => { const b = e.target.closest("[data-of]"); if (!b) return; S.of = b.dataset.of; render(); });
 let pqT; document.addEventListener("input", e => { if (e.target.id !== "pq") return; clearTimeout(pqT);
   pqT = setTimeout(() => { S.pq = e.target.value.trim().toLowerCase(); const pos = e.target.selectionStart; render(); const n = $("#pq"); if (n) { n.focus(); n.setSelectionRange(pos, pos); } }, 200); });
 /* ------------------------------------------------------------------ reminders: what to do, in words */
@@ -1120,30 +1125,37 @@ function followHTML(d) {
   const add = S.canWrite ? `<div class="fu-add"><input type="text" data-keep="fu-${esc(d._id)}" id="fu-${esc(d._id)}" placeholder="Write the follow-up: what the salesman / client said…" aria-label="Follow-up note for ${esc(d.ref || d.client || "")}"><button type="button" class="btn sm primary" data-cmadd="${esc(d._id)}" data-box="fu-${esc(d._id)}">Save</button></div>` : "";
   return list || add ? `<div class="fu-box"><h6>Follow-up</h6>${list}${add}</div>` : "";
 }
-function offersHTML(list) {
+function offersHTML(all) {
   const days = d => d.offerDate ? T() - dn(d.offerDate) : null;
+  const signed = d => d.stage === "signed", nP = all.filter(d => !signed(d)).length, nS = all.length - nP;
+  const of = ["pending", "signed", "all"].includes(S.of) ? S.of : "pending";
+  const list = all.filter(d => of === "all" || (of === "signed") === signed(d));
   list.sort((a, b) => (b.offerDate || "").localeCompare(a.offerDate || ""));
+  const chips = `<div class="sf-chips of-chips">${[["pending", "Pending", nP], ["signed", "Signed", nS], ["all", "All", all.length]].map(([k, l, n]) => `<button type="button" class="sf-chip ${of === k ? "on" : ""}" data-of="${k}"><span class="sf-l">${l}</span><b>${n}</b></button>`).join("")}</div>`;
   const add = S.canWrite ? `<button type="button" class="btn sm primary" data-new="offer">+ New offer</button>` : "";
   const card = d => {
     const n = days(d), price = d.price != null ? `$${d.price}/MT` : (d.priceNote || "");
     const qty = isFinite(num(d.qty)) ? `${mt(num(d.qty))} MT` : (d.qtyNote || "");
-    const btn = S.canWrite ? `<button type="button" class="btn sm primary" data-act="signed" data-id="${esc(d._id)}">Client signed →</button><button type="button" class="btn sm ghost" data-act="lost" data-id="${esc(d._id)}">Lost</button>` : "";
+    const btn = S.canWrite && !signed(d) ? `<button type="button" class="btn sm primary" data-act="signed" data-id="${esc(d._id)}">Client signed →</button><button type="button" class="btn sm ghost" data-act="lost" data-id="${esc(d._id)}">Lost</button>` : "";
+    const status = signed(d) ? (/signed/i.test(d.offerStatus || "") && !/to be/i.test(d.offerStatus) ? d.offerStatus : "✓ Signed") : (d.offerStatus && !/signed/i.test(d.offerStatus) || /to be/i.test(d.offerStatus || "") ? d.offerStatus : "");
     return `<article class="todo ${d._a.level > 0 ? `l${d._a.level}` : "l0"}">
       <button type="button" class="todo-main" data-open="${esc(d._id)}">
-        <span class="t-top"><b>${esc(d.client)}</b><span class="mono">${esc(d.ref || "")}</span>${d.salesman ? `<span class="tag">${esc(d.salesman)}</span>` : ""}${d.offerStatus ? `<span class="tag ${/signed/i.test(d.offerStatus) && !/to be/i.test(d.offerStatus) ? "ok" : ""}">${esc(d.offerStatus)}</span>` : ""}</span>
+        <span class="t-top"><b>${esc(d.client)}</b><span class="mono">${esc(d.ref || "")}</span>${d.salesman ? `<span class="tag">${esc(d.salesman)}</span>` : ""}${status ? `<span class="tag ${signed(d) ? "ok" : ""}">${esc(status)}</span>` : ""}</span>
         <span class="t-do">${esc(d.product || "")}${qty ? ` · ${esc(qty)}` : ""}</span>
         <span class="t-sub">${esc([d.dest, d.supplier ? `Supplier: ${d.supplier}` : "", d.margin ? `Margin ${d.margin}` : ""].filter(Boolean).join(" · "))}</span>
         <span class="t-sub">Sent ${esc(fD(d.offerDate))}${n != null ? ` · ${n} day${n === 1 ? "" : "s"} ago` : ""}${d._a.level === 3 ? " · <b class=\"fu\">follow up</b>" : ""}</span>
       </button>
-      <div class="t-side"><span class="t-amt">${esc(price)}</span><small>offer price</small>${(() => { const pr = profitOf(d); return pr ? `<span class="t-profit">${pr.total != null ? `Profit ≈ ${esc(usd(pr.total))}` : `Margin $${pr.mt}/MT`}</span><small>${pr.pct}% margin</small>` : ""; })()}${waLink(d)}${btn}</div>
+      <div class="t-side"><span class="t-amt">${esc(price)}</span><small>${signed(d) ? "signed price" : "offer price"}</small>${(() => { const pr = profitOf(d); return pr ? `<span class="t-profit">${pr.total != null ? `Profit ≈ ${esc(usd(pr.total))}` : `Margin $${pr.mt}/MT`}</span><small>${pr.pct}% margin</small>` : ""; })()}${signed(d) ? "" : waLink(d)}${btn}</div>
       ${followHTML(d)}
     </article>`;
   };
-  return `<div class="page-h"><h2>Pending offers</h2><span class="meta">${list.length} offers from the pending-offers sheet · kept separate from the client statement${(() => { const t = list.reduce((x, d) => x + ((profitOf(d) || {}).total || 0), 0); return t ? ` · expected profit if all are signed ≈ ${esc(usd(t))}` : ""; })()}</span><span style="flex:1"></span>${add}</div>
-    ${list.length ? `<div class="todos">${list.map(card).join("").replace(/&lt;b class=&quot;fu&quot;&gt;follow up&lt;\/b&gt;/g, '<b class="fu">follow up</b>')}</div>` : `<div class="empty"><span>No pending offers.</span>${add}</div>`}`;
+  const prof = (() => { const t = list.reduce((x, d) => x + ((profitOf(d) || {}).total || 0), 0); return t ? (of === "pending" ? ` · expected profit if all are signed ≈ ${esc(usd(t))}` : of === "signed" ? ` · profit on signed offers ≈ ${esc(usd(t))}` : ` · profit, all offers ≈ ${esc(usd(t))}`) : ""; })();
+  const title = of === "signed" ? "Signed offers" : of === "all" ? "All offers" : "Pending offers";
+  return `<div class="page-h"><h2>${title}</h2><span class="meta">${list.length} offer${list.length === 1 ? "" : "s"} · kept separate from the client statement${prof}</span><span style="flex:1"></span>${add}</div>${chips}
+    ${list.length ? `<div class="todos">${list.map(card).join("").replace(/&lt;b class=&quot;fu&quot;&gt;follow up&lt;\/b&gt;/g, '<b class="fu">follow up</b>')}</div>` : `<div class="empty"><span>${of === "signed" ? "No signed offers yet." : "No pending offers."}</span>${of === "pending" ? add : ""}</div>`}`;
 }
 function todayHTML(open) {
-  open = open.filter(d => d.stage !== "offer");
+  open = open.filter(d => !inOffers(d));
   const urgent = open.filter(d => d._a.level === 1).sort(todoSort), week = open.filter(d => d._a.level === 2 || d._a.level === 3);
   const now = ymNow(), dueNow = open.reduce((x, d) => x + dueIn(d, now), 0), late = open.reduce((x, d) => x + duesBefore(d, now), 0);
   const tiles = `<div class="sumtiles">
@@ -1157,7 +1169,7 @@ function todayHTML(open) {
     ${week.length ? `<p class="more-week"><button type="button" class="btn" data-tab="week">See the ${week.length} reminder${week.length === 1 ? "" : "s"} for this week →</button></p>` : ""}`;
 }
 function weekHTML(open) {
-  open = open.filter(d => d.stage !== "offer");
+  open = open.filter(d => !inOffers(d));
   const week = open.filter(d => d._a.level === 2 || d._a.level === 3).sort(todoSort);
   const arriving = open.filter(d => d._a.level === 0 && !isArrived(d) && dn(d.eta) != null && dn(d.eta) - T() <= 7 && dn(d.eta) >= T());
   return `<div class="page-h"><h2>This week</h2><span class="meta">reminders to send and payments to follow up</span></div>
