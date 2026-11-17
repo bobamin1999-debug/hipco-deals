@@ -26,6 +26,7 @@ Read `README.md` for the parts of the system. These rules come first.
 
 ## Business rules (agreed with Bob)
 - **Never guess data.** If it isn't in the source, write "not stated" and ask.
+- **Read every signed document in full before attaching it** (signed offer, PI, B/L). Compare it with the app: quantity, sizes, price, total, currency, terms, dates, mill. If anything changed, update the offer **and** the order linked to it (`offerId`), including total, balance and dues, then tell the team exactly what changed. Never just mark it signed and attach.
 - **Mill PI counts as signed only** when a signed PI from the mill is attached (file category `pi`), or the shipment has a B/L / is shipped / arrived. Placing a mill order does not mean the PI is signed.
 - Margins and profit show for offers too, even before the client signs. Profit = margin per MT × quantity.
 - The pending-offers sheet is its own category (`sheet: "pending-offers"`), never merged into the client statement deals.
