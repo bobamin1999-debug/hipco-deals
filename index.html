@@ -291,20 +291,21 @@ button.st:hover{border-color:var(--brand);color:var(--brand);background:var(--sk
 .fu-list li{background:var(--sky);border-radius:8px;padding:6px 9px;font-size:13.5px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 10px}
 .fu-list small{color:var(--muted);font-size:11.5px;white-space:nowrap} .fu-list .fu-more{background:none;padding:0 2px;font-size:12.5px;color:var(--muted)}
 .fu-add{display:flex;gap:8px} .fu-add input{flex:1;min-width:0;font:inherit;font-size:16px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink)}
-.ck-chips{margin:0 0 14px} .tl-s{display:none}
-@media (max-width:520px){.ck-chips{display:flex;overflow-x:auto;gap:6px;padding-bottom:4px;scrollbar-width:none}.ck-chips .sf-chip{flex:0 0 auto;padding:8px 10px;gap:8px}.ck-chips .sf-chip b{font-size:15px}}
+.tl-s{display:none}
 .tabs .tl{display:block}
-@media (max-width:440px){.tabs .tl-l{display:none}.tabs .tl-s{display:inline}} .ck-list{display:flex;flex-direction:column;gap:8px}
-.ck-row{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px;box-shadow:var(--shadow)} .ck-row.done{opacity:.75}
-.ck-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;width:100%} .ck-head b{font-size:15px} .ck-prod{flex:1 1 100%;font-size:13px;color:var(--muted)}
-.ck-steps{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px}
-.ck{display:flex;flex-direction:column;align-items:flex-start;gap:1px;border-radius:9px;padding:6px 8px;font:inherit;font-size:12.5px;font-weight:600;border:1px solid transparent;text-align:left;position:relative;min-width:0}
-.ck i{font-style:normal;font-weight:800;font-size:13px} .ck small{font-weight:600;font-size:11px}
-.ck.ok{background:#e7f6ee;color:#166c3b} .ck.na{background:var(--sky);color:var(--muted)} .ck.na small{font-weight:500}
-.ck.no{background:#fdecec;color:#b42318;border-color:#f6c7c3;cursor:pointer} .ck.no small{text-decoration:underline}
-.ck.busy{background:#fff6e0;color:#8a5a00}
-label.ck input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
-@media (max-width:520px){.ck-steps{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:440px){.tabs .tl-l{display:none}.tabs .tl-s{display:inline}} .ms-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 0 16px}
+.ms-tile{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:12px 14px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface);box-shadow:var(--shadow);cursor:pointer;font:inherit;text-align:left;color:var(--ink)}
+.ms-tile span{font-weight:700;font-size:15px} .ms-tile b{font-family:var(--f-display);font-size:30px;line-height:1.1;color:#b42318} .ms-tile.ok b{color:#166c3b} .ms-tile small{font-size:11.5px;color:var(--muted)}
+.ms-tile.on{border-color:var(--brand);background:var(--sky);box-shadow:0 0 0 2px var(--brand) inset}
+.ms-h{margin:0 0 8px} .ms-sec{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin:0 0 10px;box-shadow:var(--shadow)}
+.ms-sec summary{list-style:none;display:flex;align-items:center;gap:10px;cursor:pointer} .ms-sec summary::-webkit-details-marker{display:none}
+.ms-sec summary::after{content:"▾";color:var(--muted);margin-left:auto} .ms-sec:not([open]) summary::after{content:"▸"}
+.ms-sec h3{margin:0;font-size:16px} .ms-n{background:#fdecec;color:#b42318;border-radius:999px;padding:1px 9px;font-size:13px}
+.ms-sec.ok{display:flex;align-items:center;gap:10px;box-shadow:none;background:transparent} .ms-sec.ok h3{font-size:14px;color:var(--muted);font-weight:600} .ms-ok{color:#166c3b;margin-right:6px}
+.ms-list{margin-top:8px} .ms-row{display:flex;align-items:center;gap:10px;border-top:1px solid var(--line);padding:8px 0}
+.ms-what{flex:1;min-width:0;display:block} .ms-what small{display:block;color:var(--muted);font-size:12.5px;margin-top:1px}
+.ms-att{position:relative;overflow:hidden;white-space:nowrap} .ms-att input{position:absolute;inset:0;opacity:0;cursor:pointer}
+@media (max-width:520px){.ms-tiles{gap:6px}.ms-tile{padding:10px}.ms-tile span{font-size:13.5px}.ms-tile b{font-size:24px}.ms-tile small{display:none}.ms-row{flex-wrap:wrap}.ms-row .btn{margin-left:auto}}
 .btn.wa{background:#1f9d55;border-color:#1f9d55;color:#fff;text-decoration:none;text-align:center} .btn.wa:hover{background:#17834a}
 .pl-q{width:100%;font:inherit;font-size:15px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin:2px 0 12px;background:var(--surface);color:var(--ink)}
 .pl-seg{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:5px;margin:0 0 16px;box-shadow:var(--shadow)}
@@ -894,12 +895,12 @@ function renderInner() {
   $("#attn").innerHTML = `<span class="lbl">Needs attention</span>` + chip("1","l1","Urgent",cnt(1)) + chip("2","l2","This week",cnt(2)) +
     chip("3","l3","Sales follow-up",cnt(3)) + chip("arr","l4","Arriving in 30 days",arr) +
     (S.fl ? `<button type="button" class="btn ghost sm" data-f="">Show all</button>` : "");
-  const TAB_SHORT = {week:"Week", check:"Check", deals:"Ships"};   // short labels when 7 tabs don't fit a phone
-  const TAB_LBL = {home:"Today", week:"This week", offers:"Offers", check:"Checklist", clients:"Clients", deals:"Shipments", prices:"Prices"};
+  const TAB_SHORT = {week:"Week", deals:"Ships"};   // short labels when 7 tabs don't fit a phone
+  const TAB_LBL = {home:"Today", week:"This week", offers:"Offers", check:"Missing", clients:"Clients", deals:"Shipments", prices:"Prices"};
   const urgent = st => open.filter(d => (st ? d.stage === st : true) && d._a.level === 1).length;
   $("#tabs").innerHTML = TABS.map(k => {
     const nonOffer = open.filter(d => !inOffers(d));
-    const n = k === "home" ? nonOffer.filter(d => d._a.level === 1).length : k === "week" ? nonOffer.filter(d => d._a.level === 2 || d._a.level === 3).length : k === "offers" ? open.filter(d => d.stage === "offer").length : k === "check" ? checkRows(open).filter(r => r.miss.length).length : k === "prices" ? plRows("current").length : k === "clients" ? new Set(open.filter(d => d.stage !== "offer").map(d => clientKey(d.client))).size : open.filter(d => d.stage !== "offer").length;
+    const n = k === "home" ? nonOffer.filter(d => d._a.level === 1).length : k === "week" ? nonOffer.filter(d => d._a.level === 2 || d._a.level === 3).length : k === "offers" ? open.filter(d => d.stage === "offer").length : k === "check" ? missingGroups(open).reduce((x, g) => x + missCount(g), 0) : k === "prices" ? plRows("current").length : k === "clients" ? new Set(open.filter(d => d.stage !== "offer").map(d => clientKey(d.client))).size : open.filter(d => d.stage !== "offer").length;
     const u = 0;
     return `<button type="button" data-tab="${k}" ${S.tab===k?'aria-current="page"':""}><b>${n}</b><span class="tl">${TAB_SHORT[k] ? `<span class="tl-l">${TAB_LBL[k]}</span><span class="tl-s">${TAB_SHORT[k]}</span>` : TAB_LBL[k]}${u?` <span class="dotn">${u}</span>`:""}</span></button>`;
   }).join("");
@@ -1066,45 +1067,54 @@ let pqT; document.addEventListener("input", e => { if (e.target.id !== "pq") ret
   pqT = setTimeout(() => { S.pq = e.target.value.trim().toLowerCase(); const pos = e.target.selectionStart; render(); const n = $("#pq"); if (n) { n.focus(); n.setSelectionRange(pos, pos); } }, 200); });
 /* ------------------------------------------------------------------ checklist: one window for what's signed, what's attached, what's missing (Bob, 17.11.2026) */
 const hasCat = (d, c) => (Array.isArray(d.files) ? d.files : []).some(f => f.cat === c);
-function checkRows(open) {
-  const linked = new Set(open.map(d => d.offerId).filter(Boolean));   // a sheet offer that became a statement order is shown once, as the order
-  return open.filter(d => ["offer", "signed", "order"].includes(d.stage) && !(isSheet(d) && linked.has(d._id))).map(d => {
-    const signed = d.stage !== "offer", order = d.stage === "order", shipped = isShipped(d);
-    const steps = [
-      {k: "sign", t: "Client signed", ok: signed, na: false},
-      {k: "signed", t: "Signed copy", ok: hasCat(d, "signed"), na: !signed, cat: "signed"},
-      {k: "pi", t: "Mill PI", ok: hasPI(d), na: !signed, cat: "pi"},
-      {k: "bl", t: "B/L", ok: shipped && (hasCat(d, "shipping") || !!d.bl), na: !shipped, cat: "shipping", wait: order && !shipped}
-    ];
-    const miss = steps.filter(x => !x.ok && !x.na).map(x => x.k);
-    return {d, steps, miss};
-  });
+/* "Missing" window: everything that's missing, grouped by Documents / Payments / Shipments (Bob, 17.11.2026) */
+function missingGroups(open) {
+  const linked = new Set(open.map(d => d.offerId).filter(Boolean));
+  const deals = open.filter(d => !(isSheet(d) && linked.has(d._id)));
+  const stmt = deals.filter(d => !inOffers(d));
+  const signedAny = deals.filter(d => d.stage === "signed" || d.stage === "order");
+  const amt = v => v > 0 ? usd(v) : "";
+  return [
+    ["docs", "Documents", [
+      ["unsigned", "Offers not signed yet", deals.filter(d => d.stage === "offer"), d => d.offerDate ? `Sent ${fD(d.offerDate)}` : "", "sign"],
+      ["copy", "Signed, but signed copy not attached", signedAny.filter(d => !hasCat(d, "signed")), () => "", "signed"],
+      ["pi", "Mill PI not attached", signedAny.filter(d => !hasPI(d)), d => d.millOrder ? `Order ${d.millOrder}` : "", "pi"],
+      ["bl", "Shipped, but B/L copy not attached", signedAny.filter(d => isShipped(d) && !hasCat(d, "shipping")), d => d.bl ? `B/L ${d.bl}` : "", "shipping"]]],
+    ["pay", "Payments", [
+      ["overdue", "Overdue", stmt.filter(SF.overdue[3]), d => amt(duesBefore(d, ymNow()) || balanceOf(d)), "pay"],
+      ["deposit", "Deposit not received", stmt.filter(SF.deposit[3]), d => num(d.advPct) > 0 ? `${Math.round(num(d.advPct) * 100)}% = ${usd(value(d) * num(d.advPct))}` : "", "pay"],
+      ["duenow", `Due this month (${fM(ymNow())})`, stmt.filter(SF.duenow[3]), d => amt(dueIn(d, ymNow())), "pay"],
+      ["nosched", "Balance not scheduled yet", stmt.filter(SF.nosched[3]), d => amt(balanceOf(d) - duesOf(d).reduce((x, [, v]) => x + v, 0)), ""]]],
+    ["ship", "Shipments", [
+      ["late", "Late: not shipped yet", stmt.filter(isLate), d => d.shipMonth ? `Offer said ${fM(d.shipMonth)}` : (d.eta ? `ETA ${fD(d.eta)}` : ""), ""],
+      ["eta", "ETA passed, arrival not confirmed", stmt.filter(d => isShipped(d) && !isArrived(d) && dn(d.eta) != null && dn(d.eta) < T()), d => `ETA ${fD(d.eta)}`, ""],
+      ["noeta", "No ETA yet", stmt.filter(d => d.stage === "order" && !isShipped(d) && !d.eta && !d.etaNote), () => "", ""]]]
+  ];
 }
-const CHECK_F = [["miss", "Missing something"], ["sign", "Waiting for signature"], ["signed", "Signed copy missing"], ["pi", "Mill PI missing"], ["bl", "B/L copy missing"], ["done", "All done"], ["all", "Everything"]];
+const missCount = g => new Set(g[2].flatMap(x => x[2].map(d => d._id))).size;
 function checkHTML(open) {
-  const rows = checkRows(open), f = CHECK_F.some(([k]) => k === S.cf) ? S.cf : "miss";
-  const n = k => k === "all" ? rows.length : k === "done" ? rows.filter(r => !r.miss.length).length : k === "miss" ? rows.filter(r => r.miss.length).length : rows.filter(r => r.miss.includes(k)).length;
-  const list = rows.filter(r => f === "all" ? true : f === "done" ? !r.miss.length : f === "miss" ? r.miss.length : r.miss.includes(f))
-    .sort((a, b) => b.miss.length - a.miss.length || String(a.d.client).localeCompare(String(b.d.client)) || String(a.d.ref).localeCompare(String(b.d.ref)));
-  const chips = `<div class="sf-chips ck-chips">${CHECK_F.map(([k, l]) => `<button type="button" class="sf-chip ${f === k ? "on" : ""}" data-cf="${k}"><span class="sf-l">${l}</span><b>${n(k)}</b></button>`).join("")}</div>`;
-  const pill = (d, x) => {
-    if (x.ok) return `<span class="ck ok"><i>✓</i>${esc(x.t)}</span>`;
-    if (x.na) return `<span class="ck na"><i>–</i>${esc(x.t)}${x.wait ? `<small>not shipped</small>` : ""}</span>`;
-    if (x.k === "sign") return S.canWrite && d.stage === "offer" ? `<button type="button" class="ck no" data-act="signed" data-id="${esc(d._id)}"><i>✗</i>${esc(x.t)}<small>Mark signed →</small></button>` : `<span class="ck no"><i>✗</i>${esc(x.t)}</span>`;
-    const busy = S.busy[`deal:${d._id}:${x.cat}`];
-    if (busy) return `<span class="ck busy"><i>…</i>${esc(x.t)}<small>Uploading</small></span>`;
-    return S.assets ? `<label class="ck no"><i>✗</i>${esc(x.t)}<small>+ Attach</small><input type="file" multiple accept="${ACCEPT}" data-up="deal" data-owner="${esc(d._id)}" data-cat="${x.cat}"></label>` : `<span class="ck no"><i>✗</i>${esc(x.t)}</span>`;
+  const groups = missingGroups(open), sel = groups.some(g => g[0] === S.mg) ? S.mg : "docs";
+  const tiles = `<div class="ms-tiles">${groups.map(g => { const n = missCount(g); return `<button type="button" class="ms-tile ${sel === g[0] ? "on" : ""} ${n ? "" : "ok"}" data-mg="${g[0]}"><span>${g[1]}</span><b>${n ? n : "✓"}</b><small>${n ? `deal${n === 1 ? "" : "s"} with something missing` : "nothing missing"}</small></button>`; }).join("")}</div>`;
+  const action = (d, kind) => {
+    if (!S.canWrite && kind !== "") return "";
+    if (kind === "sign") return d.stage === "offer" ? `<button type="button" class="btn sm primary" data-act="signed" data-id="${esc(d._id)}">Mark signed</button>` : "";
+    if (kind === "pay") return `<button type="button" class="btn sm" data-act="pay" data-id="${esc(d._id)}">Payment received</button>`;
+    if (kind && S.assets) { const busy = S.busy[`deal:${d._id}:${kind}`];
+      return busy ? `<span class="att-busy">Uploading…</span>` : `<label class="btn sm primary ms-att">+ Attach ${ATT_LBL[kind] || ""}<input type="file" multiple accept="${ACCEPT}" data-up="deal" data-owner="${esc(d._id)}" data-cat="${kind}"></label>`; }
+    return "";
   };
-  const card = r => { const d = r.d;
-    return `<article class="ck-row ${r.miss.length ? "" : "done"}">
-      <button type="button" class="ck-head linkish" data-open="${esc(d._id)}"><b>${esc(d.client || "")}</b><span class="mono">${esc(d.ref || "")}</span>${isSheet(d) ? `<span class="tag">Offer</span>` : ""}<span class="ck-prod">${esc([d.product, isFinite(num(d.qty)) ? `${mt(num(d.qty))} MT` : ""].filter(Boolean).join(" · "))}</span></button>
-      <div class="ck-steps">${r.steps.map(x => pill(d, x)).join("")}</div>
-    </article>`; };
-  const title = (CHECK_F.find(([k]) => k === f) || [])[1];
-  return `<div class="page-h"><h2>Checklist</h2><span class="meta">${rows.length} offers and orders · ${n("done")} complete · tap ✗ to attach the missing file</span></div>${chips}
-    ${list.length ? `<div class="ck-list">${list.map(card).join("")}</div>` : `<div class="empty"><span>${f === "done" ? "Nothing is complete yet." : `Nothing in “${esc(title)}”. 👍`}</span></div>`}`;
+  const g = groups.find(x => x[0] === sel);
+  const sections = g[2].map(([k, title, list, info, kind]) => {
+    list = list.slice().sort((a, b) => String(a.client).localeCompare(String(b.client)) || String(a.ref).localeCompare(String(b.ref)));
+    if (!list.length) return `<div class="ms-sec ok"><h3><span class="ms-ok">✓</span>${esc(title)}</h3><span class="meta">Nothing missing</span></div>`;
+    return `<details class="ms-sec" ${S.msClosed && S.msClosed[k] ? "" : "open"} data-ms="${k}"><summary><h3>${esc(title)}</h3><b class="ms-n">${list.length}</b></summary>
+      <div class="ms-list">${list.map(d => `<div class="ms-row"><button type="button" class="ms-what linkish" data-open="${esc(d._id)}"><b>${esc(d.client || "")}</b> <span class="mono">${esc(d.ref || "")}</span><small>${esc([d.product, info(d)].filter(Boolean).join(" · "))}</small></button>${action(d, kind)}</div>`).join("")}</div></details>`;
+  }).join("");
+  return `<div class="page-h"><h2>What's missing</h2><span class="meta">Tap a box: documents, payments or shipments</span></div>${tiles}
+    <section class="ms-body"><h2 class="ms-h">${esc(g[1])}</h2>${sections}</section>`;
 }
-document.addEventListener("click", e => { const b = e.target.closest("[data-cf]"); if (!b) return; S.cf = b.dataset.cf; render(); });
+document.addEventListener("click", e => { const b = e.target.closest("[data-mg]"); if (!b) return; S.mg = b.dataset.mg; render(); });
+document.addEventListener("toggle", e => { const t = e.target; if (t.dataset && t.dataset.ms) { S.msClosed = S.msClosed || {}; S.msClosed[t.dataset.ms] = !t.open; } }, true);
 /* ------------------------------------------------------------------ reminders: what to do, in words */
 function todoText(d) {
   const a = d._a, bal = usd(balanceOf(d)), now = dueIn(d, ymNow());

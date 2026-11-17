@@ -20,7 +20,7 @@ Read `README.md` for the parts of the system. These rules come first.
 - `index.html` holds the whole app (HTML, CSS, JS). `db.js` talks to Supabase. `sw.js` is the offline cache. `config.js` holds only public keys.
 - Data: table `public.kv (col, id, data jsonb)`. Collections: `deals`, `clients`, `config` (settings), `prices` (`current`, `older`, `suppliers`).
 - Deal stages: `offer` → `signed` → `order` → `closed`. `kind` is `offshore` or `local` (Beirut). The app opens on a "Which business?" choice (back since 13.11.2026); keep the two separate, never mix their numbers. Beirut shares the offshore price list.
-- Tabs: Today · This week · Offers · Checklist · Clients · Shipments · Prices. Checklist = per offer/order: client signed, signed copy, mill PI, B/L, with one-tap attach. Alerts come from `assess(d)` (level 1 urgent, 2 this week, 3 follow-up).
+- Tabs: Today · This week · Offers · Missing · Clients · Shipments · Prices. Missing = one window of everything missing, in three boxes: Documents (not signed, signed copy, mill PI, B/L copy), Payments (overdue, deposit, due this month, not scheduled), Shipments (late, ETA passed, no ETA), with one-tap attach / actions. Alerts come from `assess(d)` (level 1 urgent, 2 this week, 3 follow-up).
 - Notifications: database trigger `kv_notify` → Edge Function `notify` (`supabase/functions/notify/index.ts`) → Web Push to every subscribed phone, except the person who made the change. A daily job (`hipco-daily-alerts`, 06:00 UTC) sends reminders. `assess()` in `notify/index.ts` must stay identical to the one in `index.html`.
 - Bulk data loads: run `alter table public.kv disable trigger kv_notify;` before and `enable` after, so the team doesn't get dozens of notifications.
 
