@@ -297,7 +297,11 @@ button.st:hover{border-color:var(--brand);color:var(--brand);background:var(--sk
 .ms-tile{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:12px 14px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface);box-shadow:var(--shadow);cursor:pointer;font:inherit;text-align:left;color:var(--ink)}
 .ms-tile span{font-weight:700;font-size:15px} .ms-tile b{font-family:var(--f-display);font-size:30px;line-height:1.1;color:#b42318} .ms-tile.ok b{color:#166c3b} .ms-tile small{font-size:11.5px;color:var(--muted)}
 .ms-tile.on{border-color:var(--brand);background:var(--sky);box-shadow:0 0 0 2px var(--brand) inset}
-.ms-h{margin:0 0 8px} .ms-sec{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin:0 0 10px;box-shadow:var(--shadow)}
+.ms-h{margin:0 0 8px} .ms-subs{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin:0 0 14px}
+.ms-sub{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface);box-shadow:var(--shadow);cursor:pointer;font:inherit;text-align:left;color:var(--ink);font-weight:600;font-size:14px}
+.ms-sub b{font-family:var(--f-display);font-size:22px;color:#b42318} .ms-sub.ok b{color:#166c3b} .ms-sub.on{border-color:var(--brand);background:var(--sky);box-shadow:0 0 0 2px var(--brand) inset}
+.ms-hint{color:var(--muted);margin:4px 2px} .ms-sec-h{display:flex;align-items:center;gap:10px}
+@media (max-width:520px){.ms-subs{grid-template-columns:1fr 1fr;gap:6px}.ms-sub{padding:10px;font-size:13px}.ms-sub b{font-size:19px}} .ms-sec{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin:0 0 10px;box-shadow:var(--shadow)}
 .ms-sec summary{list-style:none;display:flex;align-items:center;gap:10px;cursor:pointer} .ms-sec summary::-webkit-details-marker{display:none}
 .ms-sec summary::after{content:"▾";color:var(--muted);margin-left:auto} .ms-sec:not([open]) summary::after{content:"▸"}
 .ms-sec h3{margin:0;font-size:16px} .ms-n{background:#fdecec;color:#b42318;border-radius:999px;padding:1px 9px;font-size:13px}
@@ -1103,18 +1107,20 @@ function checkHTML(open) {
       return busy ? `<span class="att-busy">Uploading…</span>` : `<label class="btn sm primary ms-att">+ Attach ${ATT_LBL[kind] || ""}<input type="file" multiple accept="${ACCEPT}" data-up="deal" data-owner="${esc(d._id)}" data-cat="${kind}"></label>`; }
     return "";
   };
-  const g = groups.find(x => x[0] === sel);
-  const sections = g[2].map(([k, title, list, info, kind]) => {
-    list = list.slice().sort((a, b) => String(a.client).localeCompare(String(b.client)) || String(a.ref).localeCompare(String(b.ref)));
-    if (!list.length) return `<div class="ms-sec ok"><h3><span class="ms-ok">✓</span>${esc(title)}</h3><span class="meta">Nothing missing</span></div>`;
-    return `<details class="ms-sec" ${S.msClosed && S.msClosed[k] ? "" : "open"} data-ms="${k}"><summary><h3>${esc(title)}</h3><b class="ms-n">${list.length}</b></summary>
-      <div class="ms-list">${list.map(d => `<div class="ms-row"><button type="button" class="ms-what linkish" data-open="${esc(d._id)}"><b>${esc(d.client || "")}</b> <span class="mono">${esc(d.ref || "")}</span><small>${esc([d.product, info(d)].filter(Boolean).join(" · "))}</small></button>${action(d, kind)}</div>`).join("")}</div></details>`;
-  }).join("");
-  return `<div class="page-h"><h2>What's missing</h2><span class="meta">Tap a box: documents, payments or shipments</span></div>${tiles}
-    <section class="ms-body"><h2 class="ms-h">${esc(g[1])}</h2>${sections}</section>`;
+  const g = groups.find(x => x[0] === sel), subs = g[2], sub = subs.find(x => x[0] === S.ms);
+  const subTiles = `<div class="ms-subs">${subs.map(([k, title, list]) => `<button type="button" class="ms-sub ${sub && sub[0] === k ? "on" : ""} ${list.length ? "" : "ok"}" data-ms-pick="${k}"><span>${esc(title)}</span><b>${list.length || "✓"}</b></button>`).join("")}</div>`;
+  let body = `<p class="ms-hint">Pick a box to see the list.</p>`;
+  if (sub) {
+    const [k, title, list0, info, kind] = sub;
+    const list = list0.slice().sort((a, b) => String(a.client).localeCompare(String(b.client)) || String(a.ref).localeCompare(String(b.ref)));
+    body = `<div class="ms-sec" id="ms-list"><div class="ms-sec-h"><h3>${esc(title)}</h3>${list.length ? `<b class="ms-n">${list.length}</b>` : ""}</div>
+      ${list.length ? `<div class="ms-list">${list.map(d => `<div class="ms-row"><button type="button" class="ms-what linkish" data-open="${esc(d._id)}"><b>${esc(d.client || "")}</b> <span class="mono">${esc(d.ref || "")}</span><small>${esc([d.product, info(d)].filter(Boolean).join(" · "))}</small></button>${action(d, kind)}</div>`).join("")}</div>` : `<p class="ms-hint"><span class="ms-ok">✓</span>Nothing missing here.</p>`}</div>`;
+  }
+  return `<div class="page-h"><h2>What's missing</h2><span class="meta">Tap a box, then pick what you want to see</span></div>${tiles}
+    <section class="ms-body"><h2 class="ms-h">${esc(g[1])}</h2>${subTiles}${body}</section>`;
 }
-document.addEventListener("click", e => { const b = e.target.closest("[data-mg]"); if (!b) return; S.mg = b.dataset.mg; render(); });
-document.addEventListener("toggle", e => { const t = e.target; if (t.dataset && t.dataset.ms) { S.msClosed = S.msClosed || {}; S.msClosed[t.dataset.ms] = !t.open; } }, true);
+document.addEventListener("click", e => { const b = e.target.closest("[data-ms-pick]"); if (!b) return; S.ms = S.ms === b.dataset.msPick ? "" : b.dataset.msPick; render(); if (S.ms) setTimeout(() => { const l = document.getElementById("ms-list"); if (l && l.getBoundingClientRect().top > innerHeight * .6) l.scrollIntoView({behavior: "smooth", block: "start"}); }, 30); });
+document.addEventListener("click", e => { const b = e.target.closest("[data-mg]"); if (!b) return; if (S.mg !== b.dataset.mg) S.ms = ""; S.mg = b.dataset.mg; render(); });
 /* ------------------------------------------------------------------ reminders: what to do, in words */
 function todoText(d) {
   const a = d._a, bal = usd(balanceOf(d)), now = dueIn(d, ymNow());
