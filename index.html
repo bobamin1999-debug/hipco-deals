@@ -1912,7 +1912,12 @@ async function boot() {
   if (u) start(u); else showLogin();
 }
 if ("serviceWorker" in navigator && !window.HIPCO_TEST_BACKEND) {
-  navigator.serviceWorker.register("sw.js").catch(() => {});
+  navigator.serviceWorker.register("sw.js").then(reg => {
+    /* an app left open for hours still picks up new versions: check every 5 minutes and whenever it comes back to the screen */
+    const check = () => reg.update().catch(() => {});
+    setInterval(check, 5 * 60 * 1000);
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") check(); });
+  }).catch(() => {});
   let reloaded = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => { if (reloaded) return; reloaded = true; toast("App updated. Reloading…"); setTimeout(() => location.reload(), 800); });
 }
