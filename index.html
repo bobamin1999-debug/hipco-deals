@@ -554,7 +554,7 @@ try { history.replaceState(null, "", location.pathname); } catch (e) {}
 const kindOf = d => d.kind === "offshore" ? "offshore" : "local";
 const BIZ_NAME = {local:"Beirut", offshore:"Offshore"};
 function bizStats(k) {
-  const l = [...S.deals.values()].filter(d => kindOf(d) === k), o = l.filter(d => d.stage !== "closed");
+  const l = [...S.deals.values()].filter(d => kindOf(d) === k && !isRemoved(d)), o = l.filter(d => d.stage !== "closed");
   const u = o.filter(d => assess(d).level === 1).length;
   return `${o.length} open deal${o.length===1?"":"s"}` + (u ? ` · <span class="u">${u} urgent</span>` : "");
 }
@@ -599,6 +599,8 @@ const isArrived = d => !!(d.arrived || d.arrivedOn);
 // rule (Bob 09.11.2026): PI counts as signed only with the signed PI attached, or once the goods have a B/L / shipped / arrived
 /* the pending-offers sheet stays in the Offers tab even after the client signs (Bob, 16.11.2026) */
 const isSheet = d => d.sheet === "pending-offers";
+/* offers Bob took off the list are kept in the database (closed, outcome "removed") but hidden everywhere in the app */
+const isRemoved = d => d.outcome === "removed";
 const inOffers = d => d.stage === "offer" || (isSheet(d) && d.stage === "signed");
 const hasPI = d => (Array.isArray(d.files) ? d.files : []).some(f => f.cat === "pi") || isShipped(d) || isArrived(d);
 const needsDeposit = d => num(d.advPct) > 0 && !d.depositOn && !(num(d.paid) > 0);
@@ -897,7 +899,7 @@ function render() {
 function renderInner() {
   renderChooser();
   if (!S.biz) return;
-  const all = [...S.deals.values()].filter(d => kindOf(d) === S.biz);
+  const all = [...S.deals.values()].filter(d => kindOf(d) === S.biz && !isRemoved(d));
   $("#sub").textContent = `${all.length} deals · live · ${fD(todayISO())}`;
   all.forEach(d => d._a = assess(d));
   const open = all.filter(d => d.stage !== "closed");
@@ -1830,7 +1832,7 @@ async function exportExcel() {
   const btn = $("#xl"); btn.disabled = true; btn.textContent = "Preparing…";
   try {
     const X = await loadXLSX();
-    const rows = [...S.deals.values()].filter(d => !S.biz || kindOf(d) === S.biz).map(d => ({ ...d, _a: assess(d) })).sort((a,b) => STAGES.findIndex(s=>s.key===a.stage) - STAGES.findIndex(s=>s.key===b.stage) || cmp(a,b)).map(d => ({
+    const rows = [...S.deals.values()].filter(d => (!S.biz || kindOf(d) === S.biz) && !isRemoved(d)).map(d => ({ ...d, _a: assess(d) })).sort((a,b) => STAGES.findIndex(s=>s.key===a.stage) - STAGES.findIndex(s=>s.key===b.stage) || cmp(a,b)).map(d => ({
       "Stage": STAGES.find(s => s.key === d.stage)?.title || d.stage, "Alert": d._a.label, "Order": d.ref || "",
       "Client": d.client || "", "Product": d.product || "", "Qty MT": isFinite(num(d.qty)) ? num(d.qty) : "", "Qty type": d.qtyType || "",
       "Account no.": d.clientCode || "", "Cur": d.cur || "", "Price / MT": d.price ?? (d.priceNote || ""), "Value": value(d) || "", "Paid": paidOf(d) || 0, "Balance": balanceOf(d) || 0,
