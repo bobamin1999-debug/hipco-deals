@@ -323,6 +323,14 @@ button.st:hover{border-color:var(--brand);color:var(--brand);background:var(--sk
 .nb-tw{overflow-x:auto} .nb-t{width:100%;border-collapse:collapse;font-size:13.5px} .nb-t th{text-align:left;color:var(--muted);font-weight:600;font-size:12px;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
 .nb-t td{padding:7px 8px;border-bottom:1px solid var(--line)} .nb-t td.n,.nb-t th:not(:first-child){text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap} .nb-t .bad{color:#b42318;font-weight:700} .nb-t tr.tot td{font-weight:700;border-bottom:0}
 @media (max-width:640px){.nb-tiles{grid-template-columns:1fr 1fr;gap:8px}.nb-tile{padding:11px 12px}.nb-tile b{font-size:21px}.nb-tile.big{grid-column:1 / -1}.nb-bar{grid-template-columns:80px 1fr 86px;font-size:12.5px}.nb-t{font-size:12.5px}.nb-t th:nth-child(2),.nb-t td:nth-child(2),.nb-t th:nth-child(3),.nb-t td:nth-child(3),.nb-t th:nth-child(4),.nb-t td:nth-child(4){display:none}}
+.rp-list{display:flex;flex-direction:column;gap:8px} .rp-row{display:block;width:100%;text-align:left;font:inherit;color:inherit;background:var(--surface);border:1px solid var(--line);border-left:5px solid #9aa6bd;border-radius:12px;padding:10px 12px;cursor:pointer}
+.rp-row.l1{border-left-color:#c0392b} .rp-row.l2{border-left-color:#d98e04} .rp-row.l3{border-left-color:#5b7bd5} .rp-row.l0{border-left-color:#1e9e50}
+.rp-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap} .rp-h .mono{color:var(--muted);font-size:12.5px} .rp-s{display:block;color:var(--muted);font-size:12.5px;margin:3px 0 4px}
+.rp-row .pill{border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:700} .pill.l1{background:#fbd6d6;color:#b02a1e} .pill.l2{background:#ffe9c2;color:#9a5c00} .pill.l3{background:#e3e9f3;color:#3c4a60} .pill.l0{background:#d8f1e1;color:#166c3b}
+.rp-l{margin:0;padding-left:18px;font-size:13.5px} .rp-l li{margin:2px 0} .rp-l li.v1{color:#b42318;font-weight:600} .rp-l li.v2{color:#7a4a00} .rp-ok{color:#166c3b;font-size:13px}
+.rp-h4{margin:14px 0 4px;font-size:14px} .rp-h4.bad{color:#b42318} .rp-h4.warn{color:#9a5b00} .rp-tr{cursor:pointer} .rp-seg{margin-bottom:12px}
+.page-h [data-print]{margin-left:auto}
+@media print{ @page{size:A4;margin:10mm} body{background:#fff} .top,.tabs,.pipe,#attn,#tools,.no-print,#biz,.toast,#scrim{display:none!important} .nb-sec,.nb-tile,.rp-row{box-shadow:none;break-inside:avoid} .nb-tiles{grid-template-columns:repeat(3,1fr)!important} .nb-tw{overflow:visible} }
 .btn.wa{background:#1f9d55;border-color:#1f9d55;color:#fff;text-decoration:none;text-align:center} .btn.wa:hover{background:#17834a}
 .pl-q{width:100%;font:inherit;font-size:15px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin:2px 0 12px;background:var(--surface);color:var(--ink)}
 .pl-seg{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:5px;margin:0 0 16px;box-shadow:var(--shadow)}
@@ -543,13 +551,14 @@ const CLIP = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-
 const S = {db:null, files:null, assets:null, downloads:null, canWrite:false, loaded:false, deals:new Map(), clients:new Map(), cfg:{...DEFAULTS},
   q:"", fs:"", fl:"", tab:"home", prices:{}, pf:"", pq:"", pOld:false, collapsed:{}, limit:{}, openId:null, busy:{}};
 try { const c = JSON.parse(localStorage.getItem("hipco-deals-ui")||"{}"); S.collapsed = c.collapsed||{}; S.installHidden = !!c.installHidden; S.tab = c.tab || "home"; } catch(e) {}
-const TABS = ["numbers","home","week","offers","check","clients","deals","prices"];   // focus: reminders (inquiries dropped, Nov 2026)
+const TABS = ["report","numbers","home","week","offers","check","clients","deals","prices"];   // focus: reminders (inquiries dropped, Nov 2026)
 /* phone back button: business chooser is the root; then Overview {b}, a tab {t}, an open deal {m}.
    "back" closes the deal, then returns to Overview, then to the chooser. */
 S.tab = "home"; S.biz = null;
 const QS = new URLSearchParams(location.search);
 let OPEN_DEAL = QS.get("deal") || QS.get("upload");   // from a tapped notification, or an upload link from Lama's Claude
 let OPEN_CAT = QS.get("upload") ? (QS.get("cat") || "other") : null;
+let OPEN_REPORT = QS.get("report") === "1";
 try { history.replaceState(null, "", location.pathname); } catch (e) {}
 const kindOf = d => d.kind === "offshore" ? "offshore" : "local";
 const BIZ_NAME = {local:"Beirut", offshore:"Offshore"};
@@ -695,6 +704,11 @@ const F = {
   paidOn:{l:"Paid in full on",t:"date"}, mayCancel:{l:"May cancel (from En Cours)",t:"check"},
   clientCode:{l:"Client account no.",t:"text"}, priceNote:{l:"Price note (range, EUR…)",t:"text"}, etaNote:{l:"ETA if no exact date (e.g. JAN, TBC)",t:"text"},
   blNote:{l:"B/L note",t:"text"}, lot:{l:"Lot",t:"text"},
+  prodDate:{l:"Production date (from the mill PI)",t:"date"}, prodNote:{l:"Production if no exact date (e.g. DEC)",t:"text"},
+  shipBy:{l:"Must ship by",t:"date",h:"From the mill PI or the offer. Empty = estimated from the ETA"},
+  booking:{l:"Booking",t:"select",o:[["none","Not booked yet"],["asked","Asked the mill"],["booked","Booked"]]},
+  bookedOn:{l:"Booked on",t:"date"}, vessel:{l:"Vessel / booking no.",t:"text"},
+  supTerms:{l:"Supplier payment terms",t:"text",w:1}, supDues:{l:"We pay the supplier, by month",t:"dues",w:1}, supPaid:{l:"Paid to supplier so far",t:"num"},
   margin:{l:"Margin (from costing)",t:"text",w:1}, purchaseNote:{l:"Supplier price note",t:"text"}, qtyNote:{l:"Quantity note",t:"text"},
   paid:{l:"Paid so far",t:"num"}, balance:{l:"Balance still owed",t:"num"}, dues:{l:"Dues by month",t:"dues",w:1},
   payAmt:{l:"Amount received",t:"num",req:1}, payOn:{l:"Received on",t:"date"},
@@ -736,6 +750,8 @@ const EDIT_GROUPS = [
   ["Supplier and margin",["supplier","purchase","purchaseNote","margin","salesman"]],
   ["Mill & order",["millOrder","millRef","piOn","supplier","purchase","profit","port","mayCancel"]],
   ["Payments",["paid","balance","dues","depositOn","balanceDue","paidOn"]],
+  ["Supplier payments",["supTerms","supDues","supPaid"]],
+  ["Production and booking",["prodDate","prodNote","shipBy","booking","bookedOn","vessel"]],
   ["Shipment",["shippedOn","bl","blNote","eta","etaNote","arrivedOn"]],
   ["Notes",["notes"]]
 ];
@@ -914,12 +930,13 @@ function renderInner() {
   $("#attn").innerHTML = `<span class="lbl">Needs attention</span>` + chip("1","l1","Urgent",cnt(1)) + chip("2","l2","This week",cnt(2)) +
     chip("3","l3","Sales follow-up",cnt(3)) + chip("arr","l4","Arriving in 30 days",arr) +
     (S.fl ? `<button type="button" class="btn ghost sm" data-f="">Show all</button>` : "");
-  const TAB_SHORT = {numbers:"Money", week:"Week", deals:"Ships"};   // short labels when 7 tabs don't fit a phone
-  const TAB_LBL = {numbers:"Numbers", home:"Today", week:"This week", offers:"Offers", check:"Missing", clients:"Clients", deals:"Shipments", prices:"Prices"};
+  const TAB_SHORT = {report:"Report", numbers:"Money", week:"Week", deals:"Ships", offers:"Offers", check:"Missing", clients:"Clients", prices:"Prices", home:"Today"};   // short labels when 7 tabs don't fit a phone
+  const TAB_LBL = {report:"Daily report", numbers:"Numbers", home:"Today", week:"This week", offers:"Offers", check:"Missing", clients:"Clients", deals:"Shipments", prices:"Prices"};
   const urgent = st => open.filter(d => (st ? d.stage === st : true) && d._a.level === 1).length;
-  $("#tabs").innerHTML = TABS.map(k => {
+  if (S.tab === "report" && S.biz !== "offshore") S.tab = "home";
+  $("#tabs").innerHTML = TABS.filter(k => k !== "report" || S.biz === "offshore").map(k => {
     const nonOffer = open.filter(d => !inOffers(d));
-    const n = k === "numbers" ? short$(numbersData(open).collect.usd) : k === "home" ? nonOffer.filter(d => d._a.level === 1).length : k === "week" ? nonOffer.filter(d => d._a.level === 2 || d._a.level === 3).length : k === "offers" ? open.filter(d => d.stage === "offer").length : k === "check" ? missingGroups(open).reduce((x, g) => x + missCount(g), 0) : k === "prices" ? plRows("current").length : k === "clients" ? new Set(open.filter(d => d.stage !== "offer").map(d => clientKey(d.client))).size : open.filter(d => d.stage !== "offer").length;
+    const n = k === "report" ? reportData(all).urgent : k === "numbers" ? short$(numbersData(open).collect.usd) : k === "home" ? nonOffer.filter(d => d._a.level === 1).length : k === "week" ? nonOffer.filter(d => d._a.level === 2 || d._a.level === 3).length : k === "offers" ? open.filter(d => d.stage === "offer").length : k === "check" ? missingGroups(open).reduce((x, g) => x + missCount(g), 0) : k === "prices" ? plRows("current").length : k === "clients" ? new Set(open.filter(d => d.stage !== "offer").map(d => clientKey(d.client))).size : open.filter(d => d.stage !== "offer").length;
     const u = 0;
     return `<button type="button" data-tab="${k}" ${S.tab===k?'aria-current="page"':""}><b>${n}</b><span class="tl">${TAB_SHORT[k] ? `<span class="tl-l">${TAB_LBL[k]}</span><span class="tl-s">${TAB_SHORT[k]}</span>` : TAB_LBL[k]}${u?` <span class="dotn">${u}</span>`:""}</span></button>`;
   }).join("");
@@ -931,6 +948,7 @@ function renderInner() {
   if (S.tab === "prices") { $("#bands").innerHTML = pricesHTML(open); return; }
   if (S.tab === "check") { $("#bands").innerHTML = checkHTML(open); return; }
   if (S.tab === "numbers") { $("#bands").innerHTML = numbersHTML(open); return; }
+  if (S.tab === "report") { $("#bands").innerHTML = reportHTML(all); return; }
   $("#bands").innerHTML = shipmentsHTML(open.filter(d => !inOffers(d)), all.filter(d => d.stage === "closed"));
 }
 /* ------------------------------------------------------------------ shipments: nearest arrival first, with filters */
@@ -1192,6 +1210,118 @@ function numbersHTML(open) {
   const ship = `<section class="nb-sec"><h3>Goods</h3><div class="nb-tiles sm">${tile("Not shipped yet", N.notShipped, "value of orders still at the mill")}${tile("On the way", N.onWay, "shipped, not arrived")}</div></section>`;
   return `<div class="page-h"><h2>Numbers</h2><span class="meta">${esc(S.biz === "local" ? "Beirut" : "Offshore")} · live · ${esc(fD(todayISO()))}</span></div>${tiles}${chart}${table}${ship}`;
 }
+/* ------------------------------------------------------------------ Daily report (offshore only, Bob 27.11.2026)
+   1) what is missing on each order signed in the last 35 days (signed copy, mill PI, booking, documents, payments)
+   2) margins of those orders   3) money: client payments late / due, supplier payments, the week ahead
+   reportChecks() must stay identical to the one in supabase/functions/notify/index.ts (morning alert). */
+const REPORT_DAYS = 35, TRANSIT_DAYS = 35;
+const isStockDeal = d => /stock/i.test(`${d.product || ""} ${d.supplier || ""}`);
+function shipByDay(d) {
+  const s = dn(d.shipBy); if (s != null) return s;
+  const p = dn(d.prodDate); if (p != null) return p + 7;
+  const a = arrivalDay(d); return a != null ? a - TRANSIT_DAYS : null;
+}
+function reportChecks(d, lo, t) {
+  const files = [...(Array.isArray(d.files) ? d.files : []), ...(lo && Array.isArray(lo.files) ? lo.files : [])];
+  const has = c => files.some(f => f.cat === c), out = [], push = (lv, k, txt) => out.push({lv, k, txt});
+  const signed = dn(d.signedOn || (lo && lo.signedOn)), age = signed != null ? t - signed : null;
+  const sh = isShipped(d), stock = isStockDeal(d), booked = d.booking === "booked";
+  if (!has("signed")) push(2, "copy", "Signed offer copy not attached");
+  if (!stock && !sh && !has("pi")) push(age != null && age > 14 ? 1 : 2, "pi", `No signed mill PI${age != null ? ` (client signed ${age} day${age === 1 ? "" : "s"} ago)` : ""}: ask the mill for it`);
+  if (!stock && !sh) {
+    const p = dn(d.prodDate), sb = shipByDay(d), left = sb != null ? sb - t : null;
+    if (booked) push(3, "book", `Booked${d.vessel ? ` · ${d.vessel}` : ""}${d.bookedOn ? ` (${fD(d.bookedOn)})` : ""}: waiting for the B/L`);
+    else if (p != null && p < t) push(1, "book", `Production was due ${fD(d.prodDate)} and there is no booking: check with the mill for a delay`);
+    else if (left != null && left < 0) push(1, "book", `Should have shipped by ${fDn(sb)} but there is no booking: check with the mill why it hasn't shipped`);
+    else if (left != null && left <= 21) push(2, "book", `Must ship by ${fDn(sb)} (${left} day${left === 1 ? "" : "s"} left) and there is no booking${d.booking === "asked" ? " (asked the mill)" : ""}: chase the mill`);
+    else if (left == null) push(3, "book", "No production date or ETA: get them from the mill");
+  }
+  if (sh) {
+    if (!has("shipping")) push(2, "docs", "Shipped: copy of documents (B/L) not attached");
+    if (!isArrived(d) && dn(d.eta) != null && dn(d.eta) < t) push(1, "eta", `ETA ${fD(d.eta)} passed: confirm arrival`);
+  }
+  const late = duesOf(d).filter(([m]) => m < todayISO().slice(0, 7)).reduce((x, [, v]) => x + v, 0);
+  if (late > 0) push(1, "pay", `Client payment overdue: ${money(late, d.cur)}`);
+  return out;
+}
+const marginOf = d => {
+  const p = profitOf(d); if (p) return {...p, how: "costing"};
+  const c = costOf(d), pr = num(d.price), b = num(c.purchase), q = num(d.qty);
+  if (!isFinite(pr) || !isFinite(b) || !pr) return null;
+  const m = pr - b; return {mt: m, pct: Math.round(m / pr * 1000) / 10, total: isFinite(q) ? Math.round(m * q) : null, how: "price − buy"};
+};
+function reportData(all) {
+  const t = T(), ym = ymNow();
+  const open = all.filter(d => d.stage === "order" || d.stage === "signed");
+  const linked = new Set(open.map(d => d.offerId).filter(Boolean));
+  const deals = open.filter(d => !(isSheet(d) && linked.has(d._id)));
+  const signedDay = d => dn(d.signedOn || (linkedOffer(d) || {}).signedOn);
+  const recent = deals.filter(d => { const s = signedDay(d); return s != null && t - s <= REPORT_DAYS; });
+  const scope = S.rAll ? deals.filter(d => !isArrived(d)) : recent;
+  const rows = scope.map(d => ({d, c: reportChecks(d, linkedOffer(d), t)}));
+  rows.forEach(r => r.lv = r.c.reduce((m, x) => Math.min(m, x.lv), 9));
+  rows.sort((a, b) => a.lv - b.lv || (signedDay(b.d) || 0) - (signedDay(a.d) || 0));
+  const cnt = k => rows.filter(r => r.c.some(x => x.k === k && x.lv < 3)).length;
+  /* money, all open offshore orders */
+  const orders = deals.filter(d => d.stage === "order" || d.stage === "signed");
+  const lateList = orders.map(d => ({d, v: duesBefore(d, ym)})).filter(x => x.v > 0).sort((a, b) => b.v - a.v);
+  const dueList = orders.map(d => ({d, v: dueIn(d, ym)})).filter(x => x.v > 0).sort((a, b) => b.v - a.v);
+  const ym2 = (() => { const [y, m] = ym.split("-").map(Number); return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`; })();
+  const nextList = orders.map(d => ({d, v: dueIn(d, ym2)})).filter(x => x.v > 0).sort((a, b) => b.v - a.v);
+  const supOf = d => Object.entries(d.supDues && typeof d.supDues === "object" ? d.supDues : {}).filter(([m, v]) => /^\d{4}-\d{2}$/.test(m) && num(v) > 0).map(([m, v]) => [m, num(v)]);
+  const supList = orders.flatMap(d => supOf(d).filter(([m]) => m <= ym2).map(([m, v]) => ({d, m, v}))).sort((a, b) => a.m < b.m ? -1 : 1);
+  const noSup = orders.filter(d => !d.supTerms && !supOf(d).length && !isStockDeal(d) && !isArrived(d)).length;
+  const sum = (l, f = x => x.v) => l.reduce((o, x) => { if (x.d.cur === "EUR") o.eur += f(x); else o.usd += f(x); return o; }, {usd: 0, eur: 0});
+  const margins = scope.map(d => ({d, m: marginOf(d)}));
+  const profit = margins.reduce((o, x) => { const v = x.m && x.m.total; if (v) { if (x.d.cur === "EUR") o.eur += v; else o.usd += v; } return o; }, {usd: 0, eur: 0});
+  return {rows, urgent: rows.filter(r => r.lv === 1).length, scope, recentN: recent.length, allN: deals.filter(d => !isArrived(d)).length,
+    noPI: cnt("pi"), noBook: cnt("book"), noCopy: cnt("copy"), noDocs: cnt("docs"),
+    lateList, dueList, nextList, ym2, supList, noSup, late: sum(lateList), due: sum(dueList), next: sum(nextList), sup: sum(supList),
+    margins, profit};
+}
+function reportHTML(all) {
+  const R = reportData(all);
+  const both = o => `${o.usd || !o.eur ? usd(o.usd) : ""}${o.eur ? `${o.usd ? " + " : ""}€${Math.round(o.eur).toLocaleString("en-US")}` : ""}`;
+  const tile = (label, v, sub, cls = "") => `<div class="nb-tile ${cls}"><span>${esc(label)}</span><b>${v}</b><small>${sub}</small></div>`;
+  const N = R.rows.length, LV = {1: ["Urgent", "l1"], 2: ["This week", "l2"], 3: ["Follow up", "l3"], 9: ["OK", "l0"]};
+  const tiles = `<div class="nb-tiles">
+    ${tile("Urgent today", R.urgent, "orders with something to fix now", R.urgent ? "bad" : "good")}
+    ${tile("No signed mill PI", `${R.noPI} / ${N}`, "PI not attached", R.noPI ? "warn" : "good")}
+    ${tile("No booking", `${R.noBook} / ${N}`, "must ship soon or already late", R.noBook ? "warn" : "good")}
+    ${tile("Client payments late", esc(both(R.late)), `${R.lateList.length} order${R.lateList.length === 1 ? "" : "s"} · from earlier months`, R.late.usd || R.late.eur ? "bad" : "good")}
+    ${tile(`Due in ${fM(ymNow())}`, esc(both(R.due)), `${R.dueList.length} orders`, "warn")}
+    ${tile("Profit on these orders", esc(both(R.profit)), `from ${R.margins.filter(x => x.m && x.m.total).length} of ${R.margins.length} orders with a known cost`, "good")}
+  </div>`;
+  const seg = `<div class="pl-seg rp-seg no-print" role="tablist"><button type="button" data-rall="0" aria-selected="${!S.rAll}">Signed in the last ${REPORT_DAYS} days<small>${R.recentN} orders</small></button><button type="button" data-rall="1" aria-selected="${!!S.rAll}">All open orders<small>${R.allN} not arrived</small></button></div>`;
+  const rows = R.rows.map(({d, c, lv}) => {
+    const [lt, lc] = LV[lv] || LV[9], todo = c.filter(x => x.lv < 9);
+    return `<button type="button" class="rp-row ${lc}" data-open="${esc(d._id)}">
+      <span class="rp-h"><span class="pill ${lc}">${lt}</span><b>${esc(d.client)}</b><span class="mono">${esc(d.ref || "")}</span></span>
+      <span class="rp-s">${esc([d.product, isFinite(num(d.qty)) ? `${mt(num(d.qty))} MT` : "", d.supplier, (d.signedOn || (linkedOffer(d) || {}).signedOn) ? `signed ${fD(d.signedOn || linkedOffer(d).signedOn)}` : "", d.eta ? `ETA ${fD(d.eta)}` : d.etaNote ? `ETA ${d.etaNote}` : ""].filter(Boolean).join(" · "))}</span>
+      ${todo.length ? `<ul class="rp-l">${todo.map(x => `<li class="v${x.lv}">${esc(x.txt)}</li>`).join("")}</ul>` : `<span class="rp-ok">✓ Nothing missing</span>`}
+    </button>`; }).join("") || `<p class="note">No orders in this view.</p>`;
+  const mrows = R.margins.map(({d, m}) => { const c = costOf(d), low = m && m.pct < 3;
+    return `<tr><td>${esc(d.client)}<br><small class="mono">${esc(d.ref || "")}</small></td><td>${esc(d.product || "")}</td><td class="n">${esc(mt(num(d.qty)))}</td><td class="n">${esc(d.price != null && d.price !== "" ? money(num(d.price), d.cur) : (d.priceNote || "—"))}</td><td class="n">${esc(c.purchase != null && c.purchase !== "" ? money(num(c.purchase), d.cur) : "—")}</td><td class="n ${low ? "bad" : ""}">${m ? `${esc(money(m.mt, d.cur))}<br><small>${m.pct}%</small>` : "—"}</td><td class="n"><b>${m && m.total ? esc(money(m.total, d.cur)) : "—"}</b></td></tr>`; }).join("");
+  const margins = `<section class="nb-sec"><h3>Margins <small>same orders · margin per MT × quantity</small></h3><div class="nb-tw"><table class="nb-t"><thead><tr><th>Client</th><th>Product</th><th>MT</th><th>Sell</th><th>Buy</th><th>Margin / MT</th><th>Profit</th></tr></thead><tbody>${mrows}
+    <tr class="tot"><td colspan="6">Total profit (orders with a known cost)</td><td class="n"><b>${esc(both(R.profit))}</b></td></tr></tbody></table></div>
+    <p class="note">Red = under 3%. "—" = no buying price yet (add it under Supplier and margin).</p></section>`;
+  const mlist = (l, f) => l.length ? `<div class="nb-tw"><table class="nb-t"><tbody>${l.map(f).join("")}</tbody></table></div>` : `<p class="note">Nothing.</p>`;
+  const crow = x => `<tr data-open="${esc(x.d._id)}" class="rp-tr"><td>${esc(x.d.client)} <small class="mono">${esc(x.d.ref || "")}</small></td><td class="n"><b>${esc(money(x.v, x.d.cur))}</b></td></tr>`;
+  const money3 = `<section class="nb-sec"><h3>Money <small>all open offshore orders</small></h3>
+    <h4 class="rp-h4 bad">Client payments late · ${esc(both(R.late))}</h4>${mlist(R.lateList, crow)}
+    <h4 class="rp-h4 warn">Due in ${esc(fM(ymNow()))} · ${esc(both(R.due))}</h4>${mlist(R.dueList, crow)}
+    <h4 class="rp-h4">Expected in ${esc(fM(R.ym2))} · ${esc(both(R.next))}</h4>${mlist(R.nextList, crow)}
+    <h4 class="rp-h4">We pay suppliers (until ${esc(fM(R.ym2))}) · ${esc(both(R.sup))}</h4>${mlist(R.supList, x => `<tr data-open="${esc(x.d._id)}" class="rp-tr"><td>${esc(x.d.supplier || "Supplier")} <small>for ${esc(x.d.client)} ${esc(x.d.ref || "")} · ${esc(fM(x.m))}</small></td><td class="n"><b>${esc(money(x.v, x.d.cur))}</b></td></tr>`)}
+    ${R.noSup ? `<p class="note">${R.noSup} open orders have no supplier payment terms yet (add them under Supplier payments).</p>` : ""}</section>`;
+  return `<div class="page-h"><h2>Daily report</h2><span class="meta">Offshore · live · ${esc(fD(todayISO()))}</span><button type="button" class="btn sm no-print" data-print="1">Download PDF</button></div>
+    ${seg}${tiles}<section class="nb-sec"><h3>What is missing, order by order</h3><div class="rp-list">${rows}</div>
+    <p class="note">"Must ship by" comes from the mill PI (production date + 7 days) or the offer; otherwise it is the ETA minus ${TRANSIT_DAYS} days. Mark the booking on each order under Production and booking.</p></section>
+    ${margins}${money3}`;
+}
+document.addEventListener("click", e => {
+  const a = e.target.closest("[data-rall]"); if (a) { S.rAll = a.dataset.rall === "1"; render(); return; }
+  if (e.target.closest("[data-print]")) { window.print(); return; }
+});
 /* ------------------------------------------------------------------ reminders: what to do, in words */
 function todoText(d) {
   const a = d._a, bal = usd(balanceOf(d)), now = dueIn(d, ymNow());
@@ -1976,6 +2106,7 @@ async function start(u) {
     S.deals = m; S.loaded = true;
     render(); refreshOpen();
     if (OPEN_DEAL && openDeal(OPEN_DEAL)) OPEN_DEAL = null;
+    if (OPEN_REPORT) { OPEN_REPORT = false; chooseBiz("offshore"); S.tab = "report"; saveUI(); render(); }
   });
 }
 async function boot() {

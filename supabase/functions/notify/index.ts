@@ -1,7 +1,7 @@
 // HIPCO Deals: push notifications.
 // Called by the database (never by the app):
 //   {type:"change", col, op, id, old, new, by}  -> one notification for what just happened to a deal
-//   {type:"scan"}                               -> once a day: one notification per deal whose alert just changed
+//   {type:"scan"}                               -> once a day: the offshore daily report (Fridays: weekly money), then one notification per deal whose alert just changed
 // Everyone on the team gets every notification, except the person who made the change.
 import webpush from "npm:web-push@3.6.7";
 import { createClient } from "npm:@supabase/supabase-js@2.117.3";
@@ -146,6 +146,83 @@ function clientChange(id: string, o: Deal | null, n: Deal | null): Msg | null {
 }
 
 /* ---------------------------------------------------------------- sending */
+
+/* ---------------------------------------------------------------- daily report (offshore only): same rules as reportChecks() in index.html */
+const REPORT_DAYS = 35, TRANSIT_DAYS = 35;
+const MONTH_IX: Record<string, number> = { JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5, JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11 };
+function arrivalDay(d: Deal) {
+  const e = dn(d.eta); if (e != null) return e;
+  const t = String(d.etaNote || "").toUpperCase(), m = t.match(/JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC/);
+  if (!m) return null;
+  const mi = MONTH_IX[m[0]], now = new Date(todayISO() + "T00:00:00Z"), y0 = now.getUTCFullYear(), ym = t.match(/20\d\d/);
+  const y = ym ? Number(ym[0]) : (mi < now.getUTCMonth() - 1 ? y0 + 1 : y0);
+  const last = new Date(Date.UTC(y, mi + 1, 0)).getUTCDate(), dd = t.match(/\b(\d{1,2})\b/);
+  const day = /END/.test(t) ? last : dd ? Math.min(Number(dd[1]), last) : 15;
+  return Date.UTC(y, mi, day) / 864e5;
+}
+const isStockDeal = (d: Deal) => /stock/i.test(`${d.product || ""} ${d.supplier || ""}`);
+function shipByDay(d: Deal) {
+  const s = dn(d.shipBy); if (s != null) return s;
+  const p = dn(d.prodDate); if (p != null) return p + 7;
+  const a = arrivalDay(d); return a != null ? a - TRANSIT_DAYS : null;
+}
+function reportChecks(d: Deal, lo: Deal | null, t: number) {
+  const files = [...(Array.isArray(d.files) ? d.files : []), ...(lo && Array.isArray(lo.files) ? lo.files : [])];
+  const has = (c: string) => files.some((f: any) => f.cat === c), out: { lv: number; k: string; txt: string }[] = [];
+  const push = (lv: number, k: string, txt: string) => out.push({ lv, k, txt });
+  const signed = dn(d.signedOn || (lo && lo.signedOn)), age = signed != null ? t - signed : null;
+  const sh = isShipped(d), stock = isStockDeal(d), booked = d.booking === "booked";
+  if (!has("signed")) push(2, "copy", "Signed offer copy not attached");
+  if (!stock && !sh && !has("pi")) push(age != null && age > 14 ? 1 : 2, "pi", `No signed mill PI${age != null ? ` (client signed ${age} day${age === 1 ? "" : "s"} ago)` : ""}: ask the mill for it`);
+  if (!stock && !sh) {
+    const p = dn(d.prodDate), sb = shipByDay(d), left = sb != null ? sb - t : null;
+    if (booked) push(3, "book", `Booked${d.vessel ? ` · ${d.vessel}` : ""}${d.bookedOn ? ` (${fD(d.bookedOn)})` : ""}: waiting for the B/L`);
+    else if (p != null && p < t) push(1, "book", `Production was due ${fD(d.prodDate)} and there is no booking: check with the mill for a delay`);
+    else if (left != null && left < 0) push(1, "book", `Should have shipped by ${fDn(sb)} but there is no booking: check with the mill why it hasn't shipped`);
+    else if (left != null && left <= 21) push(2, "book", `Must ship by ${fDn(sb)} (${left} day${left === 1 ? "" : "s"} left) and there is no booking${d.booking === "asked" ? " (asked the mill)" : ""}: chase the mill`);
+    else if (left == null) push(3, "book", "No production date or ETA: get them from the mill");
+  }
+  if (sh) {
+    if (!has("shipping")) push(2, "docs", "Shipped: copy of documents (B/L) not attached");
+    if (!isArrived(d) && dn(d.eta) != null && dn(d.eta)! < t) push(1, "eta", `ETA ${fD(d.eta)} passed: confirm arrival`);
+  }
+  const late = duesOf(d).filter(([m]) => m < todayISO().slice(0, 7)).reduce((x, [, v]) => x + v, 0);
+  if (late > 0) push(1, "pay", `Client payment overdue: ${money(late, d.cur)}`);
+  return out;
+}
+/* the morning report: one summary + one alert per order that should already have shipped; on Fridays also the week's money */
+function dailyReport(rows: any[]): Msg[] {
+  const t = dn(todayISO())!, ym = ymNow(), byId = new Map(rows.map((r: any) => [r.id, r.data]));
+  const open = rows.filter((r: any) => r.data.kind === "offshore" && r.data.outcome !== "removed" && (r.data.stage === "order" || r.data.stage === "signed"));
+  const linked = new Set(open.map((r: any) => r.data.offerId).filter(Boolean));
+  const deals = open.filter((r: any) => !(r.data.sheet === "pending-offers" && linked.has(r.id)));
+  const lo = (d: Deal) => d.offerId ? byId.get(d.offerId) || null : null;
+  const recent = deals.filter((r: any) => { const s = dn(r.data.signedOn || (lo(r.data) || {}).signedOn); return s != null && t - s <= REPORT_DAYS; });
+  const checks = recent.map((r: any) => ({ r, c: reportChecks(r.data, lo(r.data), t) }));
+  const urgent = checks.filter(x => x.c.some(c => c.lv === 1)).length;
+  const n = (k: string) => checks.filter(x => x.c.some(c => c.k === k && c.lv < 3)).length;
+  const late = deals.reduce((s: number, r: any) => s + (r.data.cur === "EUR" ? 0 : duesBefore(r.data, ym)), 0);
+  const due = deals.reduce((s: number, r: any) => s + (r.data.cur === "EUR" ? 0 : dueIn(r.data, ym)), 0);
+  const RURL = `${APP_URL}?report=1`, msgs: Msg[] = [];
+  msgs.push({ title: `Daily report · ${fD(todayISO())}`, url: RURL,
+    body: [`${urgent} order${urgent === 1 ? "" : "s"} urgent`, `${n("pi")} without signed mill PI`, `${n("book")} need a booking`, `${n("copy")} without signed copy`,
+      late ? `${money(late)} client payments late` : "", due ? `${money(due)} due in ${fM(ym)}` : ""].filter(Boolean).join(" · ") });
+  for (const x of checks) for (const c of x.c) if (c.k === "book" && c.lv === 1)
+    msgs.push({ title: `${x.r.data.client || ""} · ${x.r.data.ref || ""}`.trim(), body: c.txt, url: url(x.r.id) });
+  if (new Date(todayISO() + "T00:00:00Z").getUTCDay() === 5) {   // Friday: the week in money
+    const ym2 = (() => { const [y, m] = ym.split("-").map(Number); return m === 12 ? `${y + 1}-01` : `${y}-${pad(m + 1)}`; })();
+    const next = deals.reduce((s: number, r: any) => s + (r.data.cur === "EUR" ? 0 : dueIn(r.data, ym2)), 0);
+    const sup = deals.reduce((s: number, r: any) => s + Object.entries(r.data.supDues || {}).filter(([m]) => m <= ym2).reduce((x: number, [, v]) => x + (num(v) || 0), 0), 0);
+    let profit = 0, withCost = 0;
+    for (const r of recent) { const d = r.data, c = (d.purchase != null ? d : lo(d)) || {}; const pr = num(d.price), b = num(c.purchase), q = num(d.qty);
+      const m = String(c.margin || "").match(/\$([\d,]+)\/MT/); const mt = m ? Number(m[1].replace(/,/g, "")) : (isFinite(pr) && isFinite(b) ? pr - b : NaN);
+      if (isFinite(mt) && isFinite(q) && d.cur !== "EUR") { profit += mt * q; withCost++; } }
+    msgs.push({ title: `Weekly money · ${fD(todayISO())}`, url: RURL,
+      body: [`Profit on recent orders ${money(profit) || "$0"} (${withCost} with cost)`, `Late ${money(late) || "$0"}`, `Due ${fM(ym)} ${money(due) || "$0"}`, `Expected ${fM(ym2)} ${money(next) || "$0"}`, `To pay suppliers ${money(sup) || "$0"}`].join(" · ") });
+  }
+  return msgs;
+}
+
 async function send(sb: any, msgs: Msg[], skipUser?: string | null) {
   if (!msgs.length) return 0;
   if (env("DEBUG")) msgs.forEach(m => console.log("MSG", JSON.stringify(m)));
@@ -207,6 +284,7 @@ Deno.serve(async req => {
         }
       }
       if (ups.length) await sb.from("push_log").upsert(ups);
+      if (!first) msgs.unshift(...dailyReport(rows || []));
       const n = await send(sb, msgs, null);
       return Response.json({ ok: true, alerts: msgs.length, sent: n, seeded: first });
     }
