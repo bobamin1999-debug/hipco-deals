@@ -186,6 +186,9 @@ const PAY_LATE = ["Payment overdue", "Balance overdue", "Arrived. Client not pai
 const LATE_NOW = ["Balance overdue", "Arrived. Client not paid"];
 const lateOf = (d: Deal, a: any) => { const ym = todayISO().slice(0, 7), l = a && a.label;
   return duesBefore(d, ym) + (LATE_NOW.includes(l) ? (dueIn(d, ym) || (duesOf(d).length ? 0 : value(d) - (num(d.paid) || 0))) : l === "Deposit not paid" ? value(d) * num(d.advPct) : 0); };
+/* copy of documents: 4 days after shipping (shipped date, else the booking's sailing date, else ETA minus the transit time) */
+const DOCS_DAYS = 4;
+function docsDueDay(d: Deal) { const s = dn(d.shippedOn) ?? dn(d.etd) ?? (dn(d.eta) != null ? dn(d.eta)! - TRANSIT_DAYS : null); return s != null ? s + DOCS_DAYS : null; }
 function reportChecks(d: Deal, lo: Deal | null, t: number, a?: any) {
   const files = [...(Array.isArray(d.files) ? d.files : []), ...(lo && Array.isArray(lo.files) ? lo.files : [])];
   const has = (c: string) => files.some((f: any) => f.cat === c), out: { lv: number; k: string; txt: string }[] = [];
@@ -204,7 +207,7 @@ function reportChecks(d: Deal, lo: Deal | null, t: number, a?: any) {
     else push(3, "book", "No production date or ETA: get them from the mill");
   }
   if (sh) {
-    if (!has("shipping")) push(2, "docs", "Shipped: copy of documents (B/L) not attached");
+    if (!has("shipping")) { const dd = docsDueDay(d); push(dd != null && dd < t ? 1 : 2, "docs", dd != null ? `Copy of documents ${dd < t ? `was due ${fDn(dd)} (4 days after shipping)` : `due ${fDn(dd)}`}: get the B/L, invoice and packing list` : "Shipped: copy of documents (B/L) not attached"); }
     if (!isArrived(d) && dn(d.eta) != null && dn(d.eta)! < t) push(1, "eta", `ETA ${fD(d.eta)} passed: confirm arrival`);
   }
   const late = lateOf(d, a);
