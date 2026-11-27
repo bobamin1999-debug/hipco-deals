@@ -172,10 +172,12 @@ function noteDay(txt: any, endOfMonth: boolean) {
   return Date.UTC(y, mi, day) / 864e5;
 }
 const isProdNote = (t: any) => /PRODUC/i.test(String(t || ""));
+/* production in month M -> the booking must be done by the end of month M+1 (Bob 27.11.2026) */
+const endNextMonth = (n: number) => { const x = new Date(n * 864e5); return Date.UTC(x.getUTCFullYear(), x.getUTCMonth() + 2, 0) / 864e5; };
 function shipByDay(d: Deal) {
   const s = dn(d.shipBy); if (s != null) return s;
-  const p = dn(d.prodDate); if (p != null) return p + 7;
-  const pn = d.prodNote || (isProdNote(d.etaNote) ? d.etaNote : ""); if (pn) { const x = noteDay(pn, true); if (x != null) return x + 7; }
+  const p = dn(d.prodDate); if (p != null) return endNextMonth(p);
+  const pn = d.prodNote || (isProdNote(d.etaNote) ? d.etaNote : ""); if (pn) { const x = noteDay(pn, true); if (x != null) return endNextMonth(x); }
   const e = dn(d.eta); if (e != null) return e - TRANSIT_DAYS;
   const a = isProdNote(d.etaNote) ? null : noteDay(d.etaNote, false); return a != null ? a - TRANSIT_DAYS : null;
 }
@@ -194,11 +196,11 @@ function reportChecks(d: Deal, lo: Deal | null, t: number, a?: any) {
   if (!stock && !sh && !has("pi")) push(age != null && age > 14 ? 1 : 2, "pi", `No signed mill PI${age != null ? ` (client signed ${age} day${age === 1 ? "" : "s"} ago)` : ""}: ask the mill for it`);
   if (!stock && !sh) {
     const p = dn(d.prodDate), sb = shipByDay(d), left = sb != null ? sb - t : null;
-    if (booked) push(3, "book", `Booked${d.vessel ? ` · ${d.vessel}` : ""}${d.bookedOn ? ` (${fD(d.bookedOn)})` : ""}: waiting for the B/L`);
-    else if (p != null && p < t) push(1, "book", `Production was due ${fD(d.prodDate)} and there is no booking: check with the mill for a delay`);
-    else if (left != null && left < 0) push(1, "book", `Should have shipped by ${fDn(sb)} but there is no booking: check with the mill why it hasn't shipped`);
-    else if (left != null && left <= 21) push(2, "book", `Must ship by ${fDn(sb)} (${left} day${left === 1 ? "" : "s"} left) and there is no booking${d.booking === "asked" ? " (asked the mill)" : ""}: chase the mill`);
-    else if (left != null) push(3, "book", `Must ship by ${fDn(sb)}: no booking yet`);
+    if (booked) { const e = dn(d.etd); push(e != null && e < t ? 1 : 3, "book", e != null && e < t ? `Booked to sail ${fD(d.etd)} but not shipped yet: get the B/L from the mill` : `Booked${d.vessel ? ` · ${d.vessel}` : ""}${d.etd ? `, sails ${fD(d.etd)}` : ""}: waiting for the B/L`); }
+    else if (p != null && p < t && (left == null || left >= 0)) push(2, "book", `Production date ${fD(d.prodDate)} passed: confirm with the mill it finished${left != null ? ` · booking due by ${fDn(sb)}` : ""}`);
+    else if (left != null && left < 0) push(1, "book", `Booking was due by ${fDn(sb)} and there is none: check with the mill why it hasn't been booked`);
+    else if (left != null && left <= 21) push(2, "book", `Booking needed by ${fDn(sb)} (${left} day${left === 1 ? "" : "s"} left)${d.booking === "asked" ? " (asked the mill)" : ""}: chase the mill`);
+    else if (left != null) push(3, "book", `Booking due by ${fDn(sb)}`);
     else push(3, "book", "No production date or ETA: get them from the mill");
   }
   if (sh) {

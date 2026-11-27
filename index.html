@@ -716,9 +716,9 @@ const F = {
   clientCode:{l:"Client account no.",t:"text"}, priceNote:{l:"Price note (range, EUR…)",t:"text"}, etaNote:{l:"ETA if no exact date (e.g. JAN, TBC)",t:"text"},
   blNote:{l:"B/L note",t:"text"}, lot:{l:"Lot",t:"text"},
   prodDate:{l:"Production date (from the mill PI)",t:"date"}, prodNote:{l:"Production if no exact date (e.g. DEC)",t:"text"},
-  shipBy:{l:"Must ship by",t:"date",h:"From the mill PI or the offer. Empty = estimated from the ETA"},
+  shipBy:{l:"Booking needed by",t:"date",h:"Empty = end of the month after production (production Dec → booking by 31 Jan), or ETA minus 35 days"},
   booking:{l:"Booking",t:"select",o:[["none","Not booked yet"],["asked","Asked the mill"],["booked","Booked"]]},
-  bookedOn:{l:"Booked on",t:"date"}, vessel:{l:"Vessel / booking no.",t:"text"},
+  bookedOn:{l:"Booked on",t:"date"}, vessel:{l:"Vessel / booking no.",t:"text"}, etd:{l:"Sailing date (ETD) from the booking",t:"date"},
   supTerms:{l:"Supplier payment terms",t:"text",w:1}, supDues:{l:"We pay the supplier, by month",t:"dues",w:1}, supPaid:{l:"Paid to supplier so far",t:"num"},
   margin:{l:"Margin (from costing)",t:"text",w:1}, purchaseNote:{l:"Supplier price note",t:"text"}, qtyNote:{l:"Quantity note",t:"text"},
   paid:{l:"Paid so far",t:"num"}, balance:{l:"Balance still owed",t:"num"}, dues:{l:"Dues by month",t:"dues",w:1},
@@ -762,7 +762,7 @@ const EDIT_GROUPS = [
   ["Mill & order",["millOrder","millRef","piOn","supplier","purchase","profit","port","mayCancel"]],
   ["Payments",["paid","balance","dues","depositOn","balanceDue","paidOn"]],
   ["Supplier payments",["supTerms","supDues","supPaid"]],
-  ["Production and booking",["prodDate","prodNote","shipBy","booking","bookedOn","vessel"]],
+  ["Production and booking",["prodDate","prodNote","shipBy","booking","bookedOn","vessel","etd"]],
   ["Shipment",["shippedOn","bl","blNote","eta","etaNote","arrivedOn"]],
   ["Notes",["notes"]]
 ];
@@ -1238,10 +1238,12 @@ function noteDay(txt, endOfMonth) {
   return Date.UTC(y, mi, day) / 864e5;
 }
 const isProdNote = (t) => /PRODUC/i.test(String(t || ""));
+/* production in month M -> the booking must be done by the end of month M+1 (Bob 27.11.2026) */
+const endNextMonth = (n) => { const x = new Date(n * 864e5); return Date.UTC(x.getUTCFullYear(), x.getUTCMonth() + 2, 0) / 864e5; };
 function shipByDay(d) {
   const s = dn(d.shipBy); if (s != null) return s;
-  const p = dn(d.prodDate); if (p != null) return p + 7;
-  const pn = d.prodNote || (isProdNote(d.etaNote) ? d.etaNote : ""); if (pn) { const x = noteDay(pn, true); if (x != null) return x + 7; }
+  const p = dn(d.prodDate); if (p != null) return endNextMonth(p);
+  const pn = d.prodNote || (isProdNote(d.etaNote) ? d.etaNote : ""); if (pn) { const x = noteDay(pn, true); if (x != null) return endNextMonth(x); }
   const e = dn(d.eta); if (e != null) return e - TRANSIT_DAYS;
   const a = isProdNote(d.etaNote) ? null : noteDay(d.etaNote, false); return a != null ? a - TRANSIT_DAYS : null;
 }
@@ -1259,11 +1261,11 @@ function reportChecks(d, lo, t, a) {
   if (!stock && !sh && !has("pi")) push(age != null && age > 14 ? 1 : 2, "pi", `No signed mill PI${age != null ? ` (client signed ${age} day${age === 1 ? "" : "s"} ago)` : ""}: ask the mill for it`);
   if (!stock && !sh) {
     const p = dn(d.prodDate), sb = shipByDay(d), left = sb != null ? sb - t : null;
-    if (booked) push(3, "book", `Booked${d.vessel ? ` · ${d.vessel}` : ""}${d.bookedOn ? ` (${fD(d.bookedOn)})` : ""}: waiting for the B/L`);
-    else if (p != null && p < t) push(1, "book", `Production was due ${fD(d.prodDate)} and there is no booking: check with the mill for a delay`);
-    else if (left != null && left < 0) push(1, "book", `Should have shipped by ${fDn(sb)} but there is no booking: check with the mill why it hasn't shipped`);
-    else if (left != null && left <= 21) push(2, "book", `Must ship by ${fDn(sb)} (${left} day${left === 1 ? "" : "s"} left) and there is no booking${d.booking === "asked" ? " (asked the mill)" : ""}: chase the mill`);
-    else if (left != null) push(3, "book", `Must ship by ${fDn(sb)}: no booking yet`);
+    if (booked) { const e = dn(d.etd); push(e != null && e < t ? 1 : 3, "book", e != null && e < t ? `Booked to sail ${fD(d.etd)} but not shipped yet: get the B/L from the mill` : `Booked${d.vessel ? ` · ${d.vessel}` : ""}${d.etd ? `, sails ${fD(d.etd)}` : ""}: waiting for the B/L`); }
+    else if (p != null && p < t && (left == null || left >= 0)) push(2, "book", `Production date ${fD(d.prodDate)} passed: confirm with the mill it finished${left != null ? ` · booking due by ${fDn(sb)}` : ""}`);
+    else if (left != null && left < 0) push(1, "book", `Booking was due by ${fDn(sb)} and there is none: check with the mill why it hasn't been booked`);
+    else if (left != null && left <= 21) push(2, "book", `Booking needed by ${fDn(sb)} (${left} day${left === 1 ? "" : "s"} left)${d.booking === "asked" ? " (asked the mill)" : ""}: chase the mill`);
+    else if (left != null) push(3, "book", `Booking due by ${fDn(sb)}`);
     else push(3, "book", "No production date or ETA: get them from the mill");
   }
   if (sh) {
@@ -1292,15 +1294,16 @@ function stepsOf(d, lo, t) {
     S.push(pi ? {st: "done", txt: has("pi") ? (d.piOn ? fD(d.piOn) : "attached") : "shipped"} : {st: piLate ? "late" : "due", txt: sDay != null ? `asked ${t - sDay} days ago` : "ask the mill"});
     if (booked) S.push({st: "done", txt: prod != null ? fD(d.prodDate) : "finished"});
     else if (!pi) S.push({st: "wait", txt: "date comes with the PI"});
-    else if (prod != null) S.push(prod < t ? {st: "late", txt: `was due ${fD(d.prodDate)}: confirm it finished`} : {st: "due", txt: `${fD(d.prodDate)} · ${inD(prod)}`});
+    else if (prod != null) S.push(prod < t ? {st: sb != null && sb < t ? "late" : "due", txt: `${fD(d.prodDate)} passed: confirm it finished`} : {st: "due", txt: `${fD(d.prodDate)} · ${inD(prod)}`});
     else S.push({st: "late", txt: pn ? `${pn}: get the exact date` : "date not entered from the PI"});
     if (booked) S.push({st: "done", txt: sh ? "shipped" : `${d.vessel || "booked"}${d.bookedOn ? ` · ${fD(d.bookedOn)}` : ""}`});
     else if (!pi) S.push({st: "wait", txt: sb != null ? `by ${fDn(sb)}` : ""});
     else S.push(sb != null ? {st: sb < t ? "late" : sb - t <= 21 ? "due" : "wait", txt: `by ${fDn(sb)} · ${inD(sb)}`} : {st: "wait", txt: "after production"});
-    S.push(sh ? {st: "done", txt: d.bl ? `B/L ${d.bl}` : d.shippedOn ? fD(d.shippedOn) : "shipped"} : booked ? {st: sb != null && sb < t ? "late" : "due", txt: sb != null ? `by ${fDn(sb)}` : "waiting B/L"} : {st: "wait", txt: ""});
+    const etd = dn(d.etd);
+    S.push(sh ? {st: "done", txt: d.bl ? `B/L ${d.bl}` : d.shippedOn ? fD(d.shippedOn) : "shipped"} : booked ? (etd != null ? {st: etd < t ? "late" : "due", txt: `sails ${fD(d.etd)} · ${inD(etd)}`} : {st: "due", txt: "enter the sailing date"}) : {st: "wait", txt: "follows the booking"});
   }
   if (stock) S.push({st: "na", txt: ""});
-  else S.push(has("shipping") ? {st: "done", txt: "attached"} : sh ? {st: "late", txt: "B/L, invoice, packing list"} : {st: "wait", txt: "after shipping"});
+  else S.push(has("shipping") ? {st: "done", txt: "attached"} : sh ? {st: "late", txt: "shipped: B/L, invoice, packing list missing"} : {st: "wait", txt: "comes with the shipment"});
   S.push(ar ? {st: "done", txt: d.arrivedOn ? fD(d.arrivedOn) : "arrived"} : eta != null ? {st: eta < t ? "late" : sh ? "due" : "wait", txt: `ETA ${fDn(eta)}${eta < t ? " passed" : ""}`} : {st: "wait", txt: d.etaNote && !isProdNote(d.etaNote) ? `ETA ${d.etaNote}` : "no ETA yet"});
   /* the next step = the first one not done, in sequence (the signed copy is a document: it never blocks the mill steps) */
   const ix = S.findIndex((s, i) => i > 0 && (s.st === "late" || s.st === "due" || s.st === "wait"));
@@ -1391,7 +1394,7 @@ function reportHTML(all) {
     ${seg}${tiles}<section class="nb-sec"><h3>Order steps <small>always in this order: 1 → 7</small></h3>
     <div class="rp-legend"><span class="rs rs-done"><span class="ic">✓</span> done</span><span class="rs rs-due"><span class="ic">●</span> next / due soon</span><span class="rs rs-late"><span class="ic">!</span> late or missing</span><span class="rs rs-wait"><span class="ic">○</span> not reached yet</span><span class="rs rs-na"><span class="ic">–</span> not needed</span></div>
     <div class="nb-tw"><table class="rp-steps"><colgroup><col class="c-lv"><col class="c-or">${STEP_NAMES.map(() => "<col>").join("")}<col class="c-nx"></colgroup><thead><tr><th></th><th>Order</th>${STEP_NAMES.map((n, i) => `<th>${i + 1}. ${esc(n)}</th>`).join("")}<th>Next step</th></tr></thead><tbody>${rows}</tbody></table></div>
-    <p class="note">3. Production follows the date on the mill PI: enter it on the order (Production and booking). 4. Booking must be done by the production date + 7 days (or the "must ship by" date; without a PI date: ETA minus ${TRANSIT_DAYS} days). 6. Copy of documents = B/L, invoice, packing list, attached once shipped.</p></section>
+    <p class="note">3. Production follows the date on the mill PI (enter it under Production and booking). 4. Booking must be done in the month after production: production December → booking by 31 January (without a PI date: ETA minus ${TRANSIT_DAYS} days). 5. Shipping follows the booking's sailing date (ETD). 6. Copy of documents (B/L, invoice, packing list) comes with the shipment.</p></section>
     ${docsSec}${margins}${money3}`;
 }
 document.addEventListener("click", e => {
