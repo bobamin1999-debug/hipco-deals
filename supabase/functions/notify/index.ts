@@ -161,12 +161,30 @@ function arrivalDay(d: Deal) {
   return Date.UTC(y, mi, day) / 864e5;
 }
 const isStockDeal = (d: Deal) => /stock/i.test(`${d.product || ""} ${d.supplier || ""}`);
+/* month named in a note ("END JAN", "DEC/JAN" = the later one, "Production DEC 2026"): a day number */
+function noteDay(txt: any, endOfMonth: boolean) {
+  const t = String(txt || "").toUpperCase(), all = t.match(/JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC/g);
+  if (!all) return null;
+  const mi = MONTH_IX[all[all.length - 1]], now = new Date(todayISO() + "T00:00:00Z"), y0 = now.getUTCFullYear(), ym = t.match(/20\d\d/);
+  const y = ym ? Number(ym[0]) : (mi < now.getUTCMonth() - 1 ? y0 + 1 : y0);
+  const last = new Date(Date.UTC(y, mi + 1, 0)).getUTCDate(), dd = t.match(/\b(\d{1,2})\b/);
+  const day = endOfMonth || /END/.test(t) ? last : /BEG/.test(t) ? 1 : dd ? Math.min(Number(dd[1]), last) : 15;
+  return Date.UTC(y, mi, day) / 864e5;
+}
+const isProdNote = (t: any) => /PRODUC/i.test(String(t || ""));
 function shipByDay(d: Deal) {
   const s = dn(d.shipBy); if (s != null) return s;
   const p = dn(d.prodDate); if (p != null) return p + 7;
-  const a = arrivalDay(d); return a != null ? a - TRANSIT_DAYS : null;
+  const pn = d.prodNote || (isProdNote(d.etaNote) ? d.etaNote : ""); if (pn) { const x = noteDay(pn, true); if (x != null) return x + 7; }
+  const e = dn(d.eta); if (e != null) return e - TRANSIT_DAYS;
+  const a = isProdNote(d.etaNote) ? null : noteDay(d.etaNote, false); return a != null ? a - TRANSIT_DAYS : null;
 }
-function reportChecks(d: Deal, lo: Deal | null, t: number) {
+const PAY_LATE = ["Payment overdue", "Balance overdue", "Arrived. Client not paid", "Deposit not paid"];
+/* late = dues from earlier months, plus this month's when the terms already make it late (balance due date passed, arrived unpaid, deposit) */
+const LATE_NOW = ["Balance overdue", "Arrived. Client not paid"];
+const lateOf = (d: Deal, a: any) => { const ym = todayISO().slice(0, 7), l = a && a.label;
+  return duesBefore(d, ym) + (LATE_NOW.includes(l) ? (dueIn(d, ym) || (duesOf(d).length ? 0 : value(d) - (num(d.paid) || 0))) : l === "Deposit not paid" ? value(d) * num(d.advPct) : 0); };
+function reportChecks(d: Deal, lo: Deal | null, t: number, a?: any) {
   const files = [...(Array.isArray(d.files) ? d.files : []), ...(lo && Array.isArray(lo.files) ? lo.files : [])];
   const has = (c: string) => files.some((f: any) => f.cat === c), out: { lv: number; k: string; txt: string }[] = [];
   const push = (lv: number, k: string, txt: string) => out.push({ lv, k, txt });
@@ -180,32 +198,34 @@ function reportChecks(d: Deal, lo: Deal | null, t: number) {
     else if (p != null && p < t) push(1, "book", `Production was due ${fD(d.prodDate)} and there is no booking: check with the mill for a delay`);
     else if (left != null && left < 0) push(1, "book", `Should have shipped by ${fDn(sb)} but there is no booking: check with the mill why it hasn't shipped`);
     else if (left != null && left <= 21) push(2, "book", `Must ship by ${fDn(sb)} (${left} day${left === 1 ? "" : "s"} left) and there is no booking${d.booking === "asked" ? " (asked the mill)" : ""}: chase the mill`);
-    else if (left == null) push(3, "book", "No production date or ETA: get them from the mill");
+    else if (left != null) push(3, "book", `Must ship by ${fDn(sb)}: no booking yet`);
+    else push(3, "book", "No production date or ETA: get them from the mill");
   }
   if (sh) {
     if (!has("shipping")) push(2, "docs", "Shipped: copy of documents (B/L) not attached");
     if (!isArrived(d) && dn(d.eta) != null && dn(d.eta)! < t) push(1, "eta", `ETA ${fD(d.eta)} passed: confirm arrival`);
   }
-  const late = duesOf(d).filter(([m]) => m < todayISO().slice(0, 7)).reduce((x, [, v]) => x + v, 0);
-  if (late > 0) push(1, "pay", `Client payment overdue: ${money(late, d.cur)}`);
+  const late = lateOf(d, a);
+  if (late > 0) push(1, "pay", `Client payment late: ${money(late, d.cur)}${a && a.label && PAY_LATE.includes(a.label) ? ` (${a.label}${a.hint ? `, ${a.hint}` : ""})` : ""}`);
   return out;
 }
 /* the morning report: one summary + one alert per order that should already have shipped; on Fridays also the week's money */
-function dailyReport(rows: any[]): Msg[] {
+function dailyReport(rows: any[], cfg: any): Msg[] {
   const t = dn(todayISO())!, ym = ymNow(), byId = new Map(rows.map((r: any) => [r.id, r.data]));
   const open = rows.filter((r: any) => r.data.kind === "offshore" && r.data.outcome !== "removed" && (r.data.stage === "order" || r.data.stage === "signed"));
   const linked = new Set(open.map((r: any) => r.data.offerId).filter(Boolean));
   const deals = open.filter((r: any) => !(r.data.sheet === "pending-offers" && linked.has(r.id)));
   const lo = (d: Deal) => d.offerId ? byId.get(d.offerId) || null : null;
   const recent = deals.filter((r: any) => { const s = dn(r.data.signedOn || (lo(r.data) || {}).signedOn); return s != null && t - s <= REPORT_DAYS; });
-  const checks = recent.map((r: any) => ({ r, c: reportChecks(r.data, lo(r.data), t) }));
+  const checks = recent.map((r: any) => ({ r, c: reportChecks(r.data, lo(r.data), t, assess(r.data, cfg)) }));
   const urgent = checks.filter(x => x.c.some(c => c.lv === 1)).length;
   const n = (k: string) => checks.filter(x => x.c.some(c => c.k === k && c.lv < 3)).length;
-  const late = deals.reduce((s: number, r: any) => s + (r.data.cur === "EUR" ? 0 : duesBefore(r.data, ym)), 0);
-  const due = deals.reduce((s: number, r: any) => s + (r.data.cur === "EUR" ? 0 : dueIn(r.data, ym)), 0);
+  const late = deals.reduce((s: number, r: any) => s + (r.data.cur === "EUR" ? 0 : lateOf(r.data, assess(r.data, cfg))), 0);
+  const due = deals.reduce((s: number, r: any) => { const a = assess(r.data, cfg); return s + (r.data.cur === "EUR" || LATE_NOW.includes(a.label) ? 0 : dueIn(r.data, ym)); }, 0);
+  const noDocs = deals.filter((r: any) => isShipped(r.data) && ![...(r.data.files || []), ...((lo(r.data) || {}).files || [])].some((f: any) => f.cat === "shipping")).length;
   const RURL = `${APP_URL}?report=1`, msgs: Msg[] = [];
   msgs.push({ title: `Daily report · ${fD(todayISO())}`, url: RURL,
-    body: [`${urgent} order${urgent === 1 ? "" : "s"} urgent`, `${n("pi")} without signed mill PI`, `${n("book")} need a booking`, `${n("copy")} without signed copy`,
+    body: [`${urgent} order${urgent === 1 ? "" : "s"} urgent`, `${n("pi")} without signed mill PI`, `${n("book")} need a booking`, `${n("copy")} without signed copy`, noDocs ? `${noDocs} shipped without copy of documents` : "",
       late ? `${money(late)} client payments late` : "", due ? `${money(due)} due in ${fM(ym)}` : ""].filter(Boolean).join(" · ") });
   for (const x of checks) for (const c of x.c) if (c.k === "book" && c.lv === 1)
     msgs.push({ title: `${x.r.data.client || ""} · ${x.r.data.ref || ""}`.trim(), body: c.txt, url: url(x.r.id) });
@@ -284,7 +304,7 @@ Deno.serve(async req => {
         }
       }
       if (ups.length) await sb.from("push_log").upsert(ups);
-      if (!first) msgs.unshift(...dailyReport(rows || []));
+      if (!first) msgs.unshift(...dailyReport(rows || [], c));
       const n = await send(sb, msgs, null);
       return Response.json({ ok: true, alerts: msgs.length, sent: n, seeded: first });
     }

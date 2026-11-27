@@ -328,6 +328,7 @@ button.st:hover{border-color:var(--brand);color:var(--brand);background:var(--sk
 .rp-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap} .rp-h .mono{color:var(--muted);font-size:12.5px} .rp-s{display:block;color:var(--muted);font-size:12.5px;margin:3px 0 4px}
 .rp-row .pill{border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:700} .pill.l1{background:#fbd6d6;color:#b02a1e} .pill.l2{background:#ffe9c2;color:#9a5c00} .pill.l3{background:#e3e9f3;color:#3c4a60} .pill.l0{background:#d8f1e1;color:#166c3b}
 .rp-l{margin:0;padding-left:18px;font-size:13.5px} .rp-l li{margin:2px 0} .rp-l li.v1{color:#b42318;font-weight:600} .rp-l li.v2{color:#7a4a00} .rp-ok{color:#166c3b;font-size:13px}
+.rp-doc td.c,.rp-doc th:not(:first-child){text-align:center!important} .rp-y{color:#166c3b;font-weight:700} .rp-n{color:#b42318;font-weight:700;font-size:16px} .rp-na{color:#9aa6bd;font-size:12px}
 .rp-h4{margin:14px 0 4px;font-size:14px} .rp-h4.bad{color:#b42318} .rp-h4.warn{color:#9a5b00} .rp-tr{cursor:pointer} .rp-seg{margin-bottom:12px}
 .page-h [data-print]{margin-left:auto}
 @media print{ @page{size:A4;margin:10mm} body{background:#fff} .top,.tabs,.pipe,#attn,#tools,.no-print,#biz,.toast,#scrim{display:none!important} .nb-sec,.nb-tile,.rp-row{box-shadow:none;break-inside:avoid} .nb-tiles{grid-template-columns:repeat(3,1fr)!important} .nb-tw{overflow:visible} }
@@ -1216,12 +1217,30 @@ function numbersHTML(open) {
    reportChecks() must stay identical to the one in supabase/functions/notify/index.ts (morning alert). */
 const REPORT_DAYS = 35, TRANSIT_DAYS = 35;
 const isStockDeal = d => /stock/i.test(`${d.product || ""} ${d.supplier || ""}`);
+/* month named in a note ("END JAN", "DEC/JAN" = the later one, "Production DEC 2026"): a day number */
+function noteDay(txt, endOfMonth) {
+  const t = String(txt || "").toUpperCase(), all = t.match(/JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC/g);
+  if (!all) return null;
+  const mi = MONTH_IX[all[all.length - 1]], now = new Date(todayISO() + "T00:00:00Z"), y0 = now.getUTCFullYear(), ym = t.match(/20\d\d/);
+  const y = ym ? Number(ym[0]) : (mi < now.getUTCMonth() - 1 ? y0 + 1 : y0);
+  const last = new Date(Date.UTC(y, mi + 1, 0)).getUTCDate(), dd = t.match(/\b(\d{1,2})\b/);
+  const day = endOfMonth || /END/.test(t) ? last : /BEG/.test(t) ? 1 : dd ? Math.min(Number(dd[1]), last) : 15;
+  return Date.UTC(y, mi, day) / 864e5;
+}
+const isProdNote = (t) => /PRODUC/i.test(String(t || ""));
 function shipByDay(d) {
   const s = dn(d.shipBy); if (s != null) return s;
   const p = dn(d.prodDate); if (p != null) return p + 7;
-  const a = arrivalDay(d); return a != null ? a - TRANSIT_DAYS : null;
+  const pn = d.prodNote || (isProdNote(d.etaNote) ? d.etaNote : ""); if (pn) { const x = noteDay(pn, true); if (x != null) return x + 7; }
+  const e = dn(d.eta); if (e != null) return e - TRANSIT_DAYS;
+  const a = isProdNote(d.etaNote) ? null : noteDay(d.etaNote, false); return a != null ? a - TRANSIT_DAYS : null;
 }
-function reportChecks(d, lo, t) {
+const PAY_LATE = ["Payment overdue", "Balance overdue", "Arrived. Client not paid", "Deposit not paid"];
+/* late = dues from earlier months, plus this month's when the terms already make it late (balance due date passed, arrived unpaid, deposit) */
+const LATE_NOW = ["Balance overdue", "Arrived. Client not paid"];
+const lateOf = (d, a) => { const ym = todayISO().slice(0, 7), l = a && a.label;
+  return duesBefore(d, ym) + (LATE_NOW.includes(l) ? (dueIn(d, ym) || (duesOf(d).length ? 0 : value(d) - paidOf(d))) : l === "Deposit not paid" ? value(d) * num(d.advPct) : 0); };
+function reportChecks(d, lo, t, a) {
   const files = [...(Array.isArray(d.files) ? d.files : []), ...(lo && Array.isArray(lo.files) ? lo.files : [])];
   const has = c => files.some(f => f.cat === c), out = [], push = (lv, k, txt) => out.push({lv, k, txt});
   const signed = dn(d.signedOn || (lo && lo.signedOn)), age = signed != null ? t - signed : null;
@@ -1234,14 +1253,15 @@ function reportChecks(d, lo, t) {
     else if (p != null && p < t) push(1, "book", `Production was due ${fD(d.prodDate)} and there is no booking: check with the mill for a delay`);
     else if (left != null && left < 0) push(1, "book", `Should have shipped by ${fDn(sb)} but there is no booking: check with the mill why it hasn't shipped`);
     else if (left != null && left <= 21) push(2, "book", `Must ship by ${fDn(sb)} (${left} day${left === 1 ? "" : "s"} left) and there is no booking${d.booking === "asked" ? " (asked the mill)" : ""}: chase the mill`);
-    else if (left == null) push(3, "book", "No production date or ETA: get them from the mill");
+    else if (left != null) push(3, "book", `Must ship by ${fDn(sb)}: no booking yet`);
+    else push(3, "book", "No production date or ETA: get them from the mill");
   }
   if (sh) {
     if (!has("shipping")) push(2, "docs", "Shipped: copy of documents (B/L) not attached");
     if (!isArrived(d) && dn(d.eta) != null && dn(d.eta) < t) push(1, "eta", `ETA ${fD(d.eta)} passed: confirm arrival`);
   }
-  const late = duesOf(d).filter(([m]) => m < todayISO().slice(0, 7)).reduce((x, [, v]) => x + v, 0);
-  if (late > 0) push(1, "pay", `Client payment overdue: ${money(late, d.cur)}`);
+  const late = lateOf(d, a);
+  if (late > 0) push(1, "pay", `Client payment late: ${money(late, d.cur)}${a && a.label && PAY_LATE.includes(a.label) ? ` (${a.label}${a.hint ? `, ${a.hint}` : ""})` : ""}`);
   return out;
 }
 const marginOf = d => {
@@ -1258,26 +1278,30 @@ function reportData(all) {
   const signedDay = d => dn(d.signedOn || (linkedOffer(d) || {}).signedOn);
   const recent = deals.filter(d => { const s = signedDay(d); return s != null && t - s <= REPORT_DAYS; });
   const scope = S.rAll ? deals.filter(d => !isArrived(d)) : recent;
-  const rows = scope.map(d => ({d, c: reportChecks(d, linkedOffer(d), t)}));
+  const rows = scope.map(d => ({d, c: reportChecks(d, linkedOffer(d), t, d._a)}));
   rows.forEach(r => r.lv = r.c.reduce((m, x) => Math.min(m, x.lv), 9));
   rows.sort((a, b) => a.lv - b.lv || (signedDay(b.d) || 0) - (signedDay(a.d) || 0));
   const cnt = k => rows.filter(r => r.c.some(x => x.k === k && x.lv < 3)).length;
   /* money, all open offshore orders */
   const orders = deals.filter(d => d.stage === "order" || d.stage === "signed");
-  const lateList = orders.map(d => ({d, v: duesBefore(d, ym)})).filter(x => x.v > 0).sort((a, b) => b.v - a.v);
-  const dueList = orders.map(d => ({d, v: dueIn(d, ym)})).filter(x => x.v > 0).sort((a, b) => b.v - a.v);
+  const lateList = orders.map(d => ({d, v: lateOf(d, d._a), why: d._a && PAY_LATE.includes(d._a.label) ? `${d._a.label}${d._a.hint ? ` · ${d._a.hint}` : ""}` : "earlier months"})).filter(x => x.v > 0).sort((a, b) => b.v - a.v);
+  const dueList = orders.map(d => ({d, v: d._a && LATE_NOW.includes(d._a.label) ? 0 : dueIn(d, ym)})).filter(x => x.v > 0).sort((a, b) => b.v - a.v);
   const ym2 = (() => { const [y, m] = ym.split("-").map(Number); return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`; })();
   const nextList = orders.map(d => ({d, v: dueIn(d, ym2)})).filter(x => x.v > 0).sort((a, b) => b.v - a.v);
   const supOf = d => Object.entries(d.supDues && typeof d.supDues === "object" ? d.supDues : {}).filter(([m, v]) => /^\d{4}-\d{2}$/.test(m) && num(v) > 0).map(([m, v]) => [m, num(v)]);
   const supList = orders.flatMap(d => supOf(d).filter(([m]) => m <= ym2).map(([m, v]) => ({d, m, v}))).sort((a, b) => a.m < b.m ? -1 : 1);
   const noSup = orders.filter(d => !d.supTerms && !supOf(d).length && !isStockDeal(d) && !isArrived(d)).length;
   const sum = (l, f = x => x.v) => l.reduce((o, x) => { if (x.d.cur === "EUR") o.eur += f(x); else o.usd += f(x); return o; }, {usd: 0, eur: 0});
+  const docs = deals.filter(d => d.stage === "order" || d.stage === "signed").map(d => { const lo = linkedOffer(d), f = [...filesOf(d), ...(lo ? filesOf(lo) : [])], has = c => f.some(x => x.cat === c);
+    return {d, signed: has("signed"), pi: has("pi"), piNeeded: !isStockDeal(d), shipped: isShipped(d), docs: has("shipping"), arrived: isArrived(d)}; })
+    .map(x => ({...x, miss: (!x.signed) + (x.piNeeded && !x.pi && !x.shipped) + (x.shipped && !x.docs)})).filter(x => x.miss > 0)
+    .sort((a, b) => (b.shipped && !b.docs) - (a.shipped && !a.docs) || b.miss - a.miss);
   const margins = scope.map(d => ({d, m: marginOf(d)}));
   const profit = margins.reduce((o, x) => { const v = x.m && x.m.total; if (v) { if (x.d.cur === "EUR") o.eur += v; else o.usd += v; } return o; }, {usd: 0, eur: 0});
   return {rows, urgent: rows.filter(r => r.lv === 1).length, scope, recentN: recent.length, allN: deals.filter(d => !isArrived(d)).length,
     noPI: cnt("pi"), noBook: cnt("book"), noCopy: cnt("copy"), noDocs: cnt("docs"),
     lateList, dueList, nextList, ym2, supList, noSup, late: sum(lateList), due: sum(dueList), next: sum(nextList), sup: sum(supList),
-    margins, profit};
+    margins, profit, docs, noShipDocs: docs.filter(x => x.shipped && !x.docs).length};
 }
 function reportHTML(all) {
   const R = reportData(all);
@@ -1288,7 +1312,8 @@ function reportHTML(all) {
     ${tile("Urgent today", R.urgent, "orders with something to fix now", R.urgent ? "bad" : "good")}
     ${tile("No signed mill PI", `${R.noPI} / ${N}`, "PI not attached", R.noPI ? "warn" : "good")}
     ${tile("No booking", `${R.noBook} / ${N}`, "must ship soon or already late", R.noBook ? "warn" : "good")}
-    ${tile("Client payments late", esc(both(R.late)), `${R.lateList.length} order${R.lateList.length === 1 ? "" : "s"} · from earlier months`, R.late.usd || R.late.eur ? "bad" : "good")}
+    ${tile("Copy of documents missing", `${R.noShipDocs}`, "shipped orders without B/L / documents", R.noShipDocs ? "warn" : "good")}
+    ${tile("Client payments late", esc(both(R.late)), `${R.lateList.length} order${R.lateList.length === 1 ? "" : "s"} · past their due date`, R.late.usd || R.late.eur ? "bad" : "good")}
     ${tile(`Due in ${fM(ymNow())}`, esc(both(R.due)), `${R.dueList.length} orders`, "warn")}
     ${tile("Profit on these orders", esc(both(R.profit)), `from ${R.margins.filter(x => x.m && x.m.total).length} of ${R.margins.length} orders with a known cost`, "good")}
   </div>`;
@@ -1305,8 +1330,12 @@ function reportHTML(all) {
   const margins = `<section class="nb-sec"><h3>Margins <small>same orders · margin per MT × quantity</small></h3><div class="nb-tw"><table class="nb-t"><thead><tr><th>Client</th><th>Product</th><th>MT</th><th>Sell</th><th>Buy</th><th>Margin / MT</th><th>Profit</th></tr></thead><tbody>${mrows}
     <tr class="tot"><td colspan="6">Total profit (orders with a known cost)</td><td class="n"><b>${esc(both(R.profit))}</b></td></tr></tbody></table></div>
     <p class="note">Red = under 3%. "—" = no buying price yet (add it under Supplier and margin).</p></section>`;
+  const ck = (ok, na) => na ? `<span class="rp-na">n/a</span>` : ok ? `<span class="rp-y">✓</span>` : `<span class="rp-n">✗</span>`;
+  const docsSec = `<section class="nb-sec"><h3>Documents <small>all open offshore orders with something missing</small></h3><div class="nb-tw"><table class="nb-t rp-doc"><thead><tr><th>Client</th><th>Status</th><th>Signed offer</th><th>Mill PI</th><th>Copy of documents</th></tr></thead><tbody>
+    ${R.docs.map(x => `<tr data-open="${esc(x.d._id)}" class="rp-tr"><td>${esc(x.d.client)}<br><small class="mono">${esc(x.d.ref || "")}</small></td><td>${x.arrived ? "Arrived" : x.shipped ? "On the water" : "Not shipped"}</td><td class="c">${ck(x.signed)}</td><td class="c">${ck(x.pi || x.shipped, !x.piNeeded)}</td><td class="c">${ck(x.docs, !x.shipped)}</td></tr>`).join("") || `<tr><td colspan="5">Nothing missing.</td></tr>`}
+    </tbody></table></div><p class="note">Copy of documents = B/L, invoice and packing list (attach them under "B/L or shipping docs"). Mill PI counts as done once the goods have shipped. n/a = not needed yet / goods from our stock.</p></section>`;
   const mlist = (l, f) => l.length ? `<div class="nb-tw"><table class="nb-t"><tbody>${l.map(f).join("")}</tbody></table></div>` : `<p class="note">Nothing.</p>`;
-  const crow = x => `<tr data-open="${esc(x.d._id)}" class="rp-tr"><td>${esc(x.d.client)} <small class="mono">${esc(x.d.ref || "")}</small></td><td class="n"><b>${esc(money(x.v, x.d.cur))}</b></td></tr>`;
+  const crow = x => `<tr data-open="${esc(x.d._id)}" class="rp-tr"><td>${esc(x.d.client)} <small class="mono">${esc(x.d.ref || "")}</small>${x.why ? `<br><small>${esc(x.why)}</small>` : ""}</td><td class="n"><b>${esc(money(x.v, x.d.cur))}</b></td></tr>`;
   const money3 = `<section class="nb-sec"><h3>Money <small>all open offshore orders</small></h3>
     <h4 class="rp-h4 bad">Client payments late · ${esc(both(R.late))}</h4>${mlist(R.lateList, crow)}
     <h4 class="rp-h4 warn">Due in ${esc(fM(ymNow()))} · ${esc(both(R.due))}</h4>${mlist(R.dueList, crow)}
@@ -1316,7 +1345,7 @@ function reportHTML(all) {
   return `<div class="page-h"><h2>Daily report</h2><span class="meta">Offshore · live · ${esc(fD(todayISO()))}</span><button type="button" class="btn sm no-print" data-print="1">Download PDF</button></div>
     ${seg}${tiles}<section class="nb-sec"><h3>What is missing, order by order</h3><div class="rp-list">${rows}</div>
     <p class="note">"Must ship by" comes from the mill PI (production date + 7 days) or the offer; otherwise it is the ETA minus ${TRANSIT_DAYS} days. Mark the booking on each order under Production and booking.</p></section>
-    ${margins}${money3}`;
+    ${docsSec}${margins}${money3}`;
 }
 document.addEventListener("click", e => {
   const a = e.target.closest("[data-rall]"); if (a) { S.rAll = a.dataset.rall === "1"; render(); return; }
